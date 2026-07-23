@@ -1,0 +1,206 @@
+<template>
+        <SettingTablesAlertList></SettingTablesAlertList>
+
+    <client-only>
+        <v-layout class="rounded rounded-md">
+            <v-app-bar title="Application bar"></v-app-bar>
+
+            <v-navigation-drawer permanent>
+                <div class="d-flex">
+                    <v-icon>mdi-cog</v-icon>
+                    <div>配置設定</div>
+                </div>
+                <v-divider />
+                <v-text-field dense v-model="keyword" @input="filter" class="pb-2" :loading="loading"
+                    append-inner-icon="mdi-magnify" density="compact" label="搜尋" variant="outlined" hide-details
+                    single-line @click:append-inner="onClick"></v-text-field>
+                <v-treeview mandatory :items="menuItems" @update:active="handleNodeClick"
+                    density="compact"></v-treeview>
+            </v-navigation-drawer>
+
+            <v-main class="d-flex align-center justify-center" style="min-height: 300px;">
+                Main Content
+            </v-main>
+
+        </v-layout>
+    </client-only>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+
+const menuItems = ref([
+    {
+        id: 1,
+        title: '設備管理',
+        children: [
+            {
+                id: 2,
+                title: '監測管理清單',
+            },
+        ]
+    },
+    {
+        id: 3,
+        title: '巡弋設定',
+        children: [
+            {
+                id: 4,
+                title: '預設點 / 路徑設定',
+            },
+        ]
+    },
+    {
+        id: 5,
+        title: '歷史事件清單',
+        children: [
+            {
+                id: 6,
+                title: '歷史清單',
+            },
+        ]
+    }
+]);
+
+</script>
+<style lang="scss">
+@use './settings';
+</style>
+<style>
+.windows {
+    background: #fff;
+    width: 100%;
+    height: 100%;
+}
+
+
+
+.t-content-grid {
+    display: grid;
+    transition: all .3s;
+    height: 100%;
+}
+
+.t-meun {
+    border-right: #B4B4B4 1px solid;
+    transition: all .3s;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.item-card-content-window {
+    /* flex-grow: 1;
+    padding: .5em; */
+    overflow: auto;
+    display: flex;
+    height: 44px;
+    border-bottom: 1px #B4B4B4 solid;
+}
+
+.def-point-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 7% 83% 11%;
+    cursor: pointer;
+    /* background-color: #fff; */
+    align-items: center;
+}
+
+.def-point-item {
+    background-color: #E7EEEF;
+    transition: .2s;
+    border: 1px #B4B4B4 solid;
+    cursor: pointer;
+    width: 263px;
+}
+
+.def-point-btn {
+    background-color: #fff;
+    transition: .2s;
+    /* border: 2px #EAEAEA solid; */
+    cursor: pointer;
+}
+
+.active-tag {
+    border-bottom: 0px;
+    /* border: 0px #B4B4B4 solid; */
+    background-color: #fff;
+}
+
+.def-point-item:hover,
+.def-point-btn:hover {
+    background-color: #fdfdfd;
+}
+
+.def-point-name {
+    color: #2B2D2C;
+    font-weight: 700;
+}
+
+.def-point-stoptime {
+    font-size: 14px;
+}
+
+.def-point-conent {
+    /* width: 100px; */
+    overflow: hidden;
+}
+
+#temp-copy-object {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    pointer-events: none;
+    opacity: .8;
+}
+
+.path-add-message-window {
+    width: 4px;
+    position: relative;
+    /* height: 114px; */
+    background-color: #8297ff;
+}
+
+.path-add-message-window>div {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #8297ff;
+}
+
+/* select style */
+.windows .item-select .v-select.v-input--dense .v-select__selection--comma {
+    margin: 0px !important;
+}
+
+.windows .item-select .v-text-field fieldset,
+.windows .v-text-field .v-input__control {
+    height: 35px !important;
+}
+
+.windows .item-select .v-text-field.v-text-field--enclosed:not(.v-text-field--rounded)>.v-input__control>.v-input__slot,
+.v-text-field.v-text-field--enclosed .v-text-field__details {
+    height: 35px !important;
+}
+
+.windows .item-select .v-select__slot {
+    height: 32px !important;
+}
+
+.windows .item-select .v-input__append-inner {
+    margin-top: 3px !important;
+}
+
+.windows .item-select .v-input__slot {
+    padding: 0px 6px !important;
+}
+
+.windows .v-field__input {
+    padding: 0px 0px 0px 9px !important;
+    min-height: 38px !important;
+}
+</style>

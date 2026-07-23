@@ -1,0 +1,213 @@
+try {
+    var ipaddress = window.location.hostname
+    // var ipaddress = 'localhost'
+    // var ipaddress = '192.168.0.116'
+    var webstust = true
+    // ws02
+    var ws02 = null
+    var wsURL02 = `ws://${ipaddress}:8702/`
+    var ws02Int = null
+    var connectWs02 = () => {
+        // ws02 = new WebSocket("ws://localhost:8702/");
+        ws02 = new WebSocket(`ws://${ipaddress}:8702/`);
+        // ws02 = new WebSocket("ws://192.168.0.128:8702/");
+        // ws03 = new WebSocket("ws://192.168.0.116:8703/");
+        // ws03 = new WebSocket("ws://localhost:8703/");
+        ws02.onopen = (e) => {
+            console.log('(plugins)串流連接成功::8702');
+        }
+        ws02.onclose = (e) => {
+            console.log("(plugins)串流連接中斷::8702");
+            if (webstust) {
+                console.log("(plugins)嘗試重新連結...::8702");
+                if (ws02Int !== null) {
+                    clearTimeout(ws02Int)
+                }
+                ws02Int = setTimeout(() => {
+                    connectWs02()
+                    clearTimeout(ws02Int)
+                    ws02Int = null
+                }, 3000)
+            }
+        }
+    }
+    connectWs02()
+    // ws03
+    var ws03 = null
+    var ws03Int = null
+    var wsURL03 = `ws://${ipaddress}:8703/`
+    // var refreshws03 = null
+    // var manualrestart = false
+    var connectWs03 = () => {
+        ws03 = new WebSocket(`ws://${ipaddress}:8703/`);
+        ws03.onopen = (e) => {
+            console.log('(plugins)串流連接成功::8703');
+        }
+        ws03.onclose = (e) => {
+            console.log("(plugins)串流連接中斷::8703");
+            // if (webstust && !manualrestart) {
+            if (webstust) {
+                console.log("(plugins)嘗試重新連結...::8703");
+                if (ws03Int !== null) {
+                    clearTimeout(ws03Int)
+                }
+                ws03Int = setTimeout(() => {
+                    connectWs03()
+                    clearTimeout(ws03Int)
+                    ws03Int = null
+                }, 3000)
+            }
+        }
+    }
+    connectWs03()
+    // const re = () => {
+    //     refreshws03 = setTimeout(() => {
+    //         manualrestart = true
+    //         ws03.close()
+    //         setTimeout(() => {
+    //             console.log('自動重新連線');
+    //             connectWs03()
+    //             re()
+    //         }, 1)
+    //     }, 60 * 1000 * 5)
+    // }
+    // re()
+    // ws04
+    var ws04 = null
+    var wsURL04 = `ws://${ipaddress}:8704/`
+    var ws04Int = null
+    var connectws04 = () => {
+        // ws04 = new WebSocket("ws://localhost:8704/");
+        ws04 = new WebSocket(`ws://${ipaddress}:8704/`);
+        // ws04 = new WebSocket("ws://192.168.0.142:8703/");
+        // ws04 = new WebSocket("ws://192.168.0.116:8704/");
+        // ws04 = new WebSocket("ws://localhost:8703/");
+        ws04.onopen = (e) => {
+            console.log('(plugins)串流連接成功::8703');
+        }
+        ws04.onclose = (e) => {
+            console.log("(plugins)串流連接中斷::8703");
+            if (webstust) {
+                console.log("(plugins)嘗試重新連結...::8703");
+                if (ws04Int !== null) {
+                    clearTimeout(ws04Int)
+                }
+                ws04Int = setTimeout(() => {
+                    connectws04()
+                    clearTimeout(ws04Int)
+                    ws04Int = null
+                }, 3000)
+            }
+        }
+    }
+    connectws04()
+
+    // ws05
+    var ws05 = null
+    var wsURL05 = `ws://${ipaddress}:8705/`
+    var ws05Int = null
+    var connectws05 = () => {
+        // ws05 = new WebSocket("ws://localhost:8705/");
+        ws05 = new WebSocket(`ws://${ipaddress}:8705/`);
+        // ws05 = new WebSocket("ws://192.168.0.142:8703/");
+        // ws05 = new WebSocket("ws://192.168.0.116:8705/");
+        // ws05 = new WebSocket("ws://localhost:8703/");
+        ws05.onopen = (e) => {
+            console.log('(plugins)串流連接成功::8703');
+        }
+        ws05.onclose = (e) => {
+            console.log("(plugins)串流連接中斷::8703");
+            if (webstust) {
+                console.log("(plugins)嘗試重新連結...::8703");
+                if (ws05Int !== null) {
+                    clearTimeout(ws05Int)
+                }
+                ws05Int = setTimeout(() => {
+                    connectws05()
+                    clearTimeout(ws05Int)
+                    ws05Int = null
+                }, 3000)
+            }
+        }
+    }
+    connectws05()
+
+    // ws07
+    var ws07 = null
+    var wsURL07 = `ws://${ipaddress}:8707/`
+    var ws07Int = null
+    var connectws07 = () => {
+        // ws05 = new WebSocket("ws://localhost:8705/");
+        ws07 = new WebSocket(`ws://${ipaddress}:8707/`);
+        // ws05 = new WebSocket("ws://192.168.0.142:8703/");
+        // ws05 = new WebSocket("ws://192.168.0.116:8705/");
+        // ws05 = new WebSocket("ws://localhost:8703/");
+        ws07.onopen = (e) => {
+            console.log('(plugins)串流連接成功::8707');
+        }
+        ws07.onclose = (e) => {
+            console.log("(plugins)串流連接中斷::8707");
+            if (webstust) {
+                console.log("(plugins)嘗試重新連結...::8707");
+                if (ws07Int !== null) {
+                    clearTimeout(ws07Int)
+                }
+                ws07Int = setTimeout(() => {
+                    connectws07()
+                    clearTimeout(ws07Int)
+                    ws07Int = null
+                }, 3000)
+            }
+        }
+    }
+    connectws07()
+} catch (error) {
+    console.log('webscoket plugins error');
+}
+
+export default defineNuxtPlugin(() => {
+    return {
+        provide: {
+            getIpaddress: (msg) => {
+                return ipaddress
+            },
+            webSocketconnect02: (msg) => {
+                return ws02
+            },
+            webSocketconnect03: (msg) => {
+                return ws03
+            },
+            webSocketconnect04: (msg) => {
+                return ws04
+            },
+            webSocketconnect05: (msg) => {
+                return ws05
+            },
+            webSocketconnect07: (msg) => {
+                return ws07
+            },
+            webSocket05URL: (msg) => {
+                return wsURL05
+            },
+            webSocket02URL: (msg) => {
+                return wsURL02
+            },
+            webSocket03URL: (msg) => {
+                return wsURL03
+            },
+            webSocket04URL: (msg) => {
+                return wsURL04
+            },
+            displayRoi: (msg) => {
+                var roi = {
+                    spot: true,
+                    scope: true,
+                    line: true,
+                    blob: true
+                }
+                return roi
+            },
+
+        }
+    }
+})

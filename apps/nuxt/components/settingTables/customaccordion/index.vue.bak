@@ -1,0 +1,84 @@
+<template>
+    <div>
+        <div v-for="(item, index) in items" :key="index" class="border border-gray-300 rounded mb-2 overflow-hidden">
+            <!-- 標題列 -->
+            <div class="flex items-center justify-between bg-gray-100 hover:bg-gray-200 p-3 font-semibold">
+                <span>{{ item.name }}</span>
+                <!-- 點 icon 才能展開 -->
+                <button @click="toggle(index)" class="ml-2 focus:outline-none">
+                    開關
+                    <!-- <svg :class="['w-5 h-5 transition-transform duration-300', isOpen(index) ? 'rotate-90' : 'rotate-0']"
+                        fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                    </svg> -->
+                </button>
+            </div>
+
+            <!-- 動畫展開 -->
+            <Transition name="accordion">
+                <div v-if="isOpen(index)" class="p-3 bg-white border-t">
+                    {{ item.content }}
+                </div>
+            </Transition>
+        </div>
+    </div>
+</template>
+
+<script setup>
+
+const props = defineProps({
+    items: Array,
+    defaultOpened: {
+        type: Array,
+        default: () => []
+    }
+})
+
+const attrs = useAttrs()
+const allowMultiple = computed(() => attrs['data-multiple'] === 'true')
+const opened = ref(allowMultiple.value ? new Set() : null)
+
+onMounted(() => {
+    if (allowMultiple.value) {
+        props.defaultOpened.forEach(i => opened.value.add(i))
+    } else {
+        opened.value = props.defaultOpened[0] ?? null
+    }
+})
+
+const isOpen = (index) => {
+    if (allowMultiple.value) return opened.value.has(index)
+    return opened.value === index
+}
+
+const toggle = (index) => {
+    if (allowMultiple.value) {
+        if (opened.value.has(index)) {
+            opened.value.delete(index)
+        } else {
+            opened.value.add(index)
+        }
+    } else {
+        opened.value = opened.value === index ? null : index
+    }
+}
+</script>
+
+<style scoped>
+.accordion-enter-active,
+.accordion-leave-active {
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.accordion-enter-from,
+.accordion-leave-to {
+    max-height: 0;
+    opacity: 0;
+}
+
+.accordion-enter-to,
+.accordion-leave-from {
+    max-height: 500px;
+    opacity: 1;
+}
+</style>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>監測系統</title>
+  <link rel="stylesheet" href="./monitoring.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Client Monitoring</p>
+        <h1>監測系統</h1>
+      </div>
+      <div class="badge">720p / 自適應</div>
+    </header>
+
+    <main class="grid">
+      <section class="panel">
+        <div class="panel-title-row">
+          <h2>遠端收錄設定</h2>
+          <span class="muted">僅限內網</span>
+        </div>
+        <label class="field">
+          <span>遠端 IP:port / URL</span>
+          <input id="remoteUrl" type="text" placeholder="http://127.0.0.1:43127" />
+        </label>
+        <div class="actions">
+          <button id="saveConfigBtn" class="primary">儲存設定</button>
+          <button id="testConnectionBtn">連線測試</button>
+          <button id="refreshLibrariesBtn">讀取收錄庫</button>
+          <button id="manualSendBtn">手動傳送</button>
+        </div>
+        <label class="field">
+          <span>目標收錄庫</span>
+          <select id="librarySelect"></select>
+        </label>
+        <div class="inline-form">
+          <input id="newLibraryName" type="text" placeholder="新增收錄庫名稱" />
+          <button id="createLibraryBtn">建立</button>
+        </div>
+        <p id="connectionStatus" class="muted">尚未測試連線。</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title-row">
+          <h2>傳輸控制</h2>
+          <span class="muted" id="sessionId">Session: -</span>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle">
+            <input id="pauseRecording" type="checkbox" />
+            <span>暫停紀錄</span>
+          </label>
+          <label class="toggle">
+            <input id="pauseUpload" type="checkbox" />
+            <span>暫停傳送</span>
+          </label>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span>待送批次</span>
+            <strong id="pendingBatches">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>待送大小</span>
+            <strong id="pendingBytes">0 B</strong>
+          </article>
+          <article class="stat-card">
+            <span>緩衝 sample</span>
+            <strong id="pendingSamples">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>最近成功上傳</span>
+            <strong id="lastUploadAt">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel wide">
+        <div class="panel-title-row">
+          <h2>本地狀態</h2>
+          <span class="muted" id="clientId">Client: -</span>
+        </div>
+        <dl class="details">
+          <div>
+            <dt>目前收錄庫</dt>
+            <dd id="currentLibrary">未指定</dd>
+          </div>
+          <div>
+            <dt>Last ACK Sequence</dt>
+            <dd id="lastAckSequence">0</dd>
+          </div>
+          <div>
+            <dt>最後錯誤</dt>
+            <dd id="lastError">無</dd>
+          </div>
+          <div>
+            <dt>批次策略</dt>
+            <dd id="batchPolicy">10 秒 / 10 sample</dd>
+          </div>
+        </dl>
+      </section>
+    </main>
+  </div>
+
+  <script src="./monitoring-renderer.js"></script>
+</body>
+</html>

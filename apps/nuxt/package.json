@@ -1,0 +1,6 @@
+{
+  "name": "@thermalfs/donghe-nuxt",
+  "private": true,
+  "type": "module",
+  "description": "Donghe Nuxt application source. Dependencies are managed at the workspace root."
+}

@@ -1,0 +1,894 @@
+<template>
+    <div>
+        {{ vedioSrc }}<br />
+        {{ vedioSrc2 }}
+        <!-- http://localhost:5002/api/alarmEvent/share/.%5C%5CalarmEvent%5C%5C56%5C%5CalarmIR.mp4 -->
+
+        <div>
+            <VideoPlayer :videoSrc="vedioSrc"  :videoSrc2="vedioSrc2" />
+        </div>
+
+        <!-- <div >
+            <div>
+                <video ref="videoPlayer" width="400px" height="300px" :src="`http://localhost:5002/api/alarmEvent/share/${vedioSrc}`"
+                    controls @loadedmetadata="onMetadataLoaded" @canplay="onCanPlay" disabled></video>
+                <p>{{ statusMessage }}</p>
+            </div>
+        </div> -->
+
+        <!-- </v-responsive> -->
+
+        <v-toolbar color="#fff">
+            <!-- <div v-show="tab == 0" class="d-flex justify-start">
+                <div class="my-auto pr-2">選擇日期</div>
+                <div style="width: 350px;" class="my-auto">
+                    <input type="text" id="datetimerange-input1" size="40" class="v-field__input"
+                        style="text-align:center;border: 1px solid grey; height:39px;border-radius: 5px;">
+                </div>
+            </div>
+
+            <div v-if="tab == 1" class="d-flex justify-start">
+                <v-btn icon class="my-auto" @click="switchTab(0)"> <v-icon>mdi-arrow-left</v-icon></v-btn>
+                <div class="my-auto pr-2">事件清單</div>
+                <div class="my-auto pr-2" style="color:#adadad">警報發生時間: </div>
+                <div style="width: 350px;" class="my-auto">
+
+                    <v-text-field v-model="dateSelected" density="compact" variant="outlined" disabled
+                        hide-details></v-text-field>
+                </div>
+                <v-spacer></v-spacer>
+                <v-btn class="my-auto" color="#6795D4" variant="flat">確認事件</v-btn>
+
+            </div> -->
+
+            <v-row no-gotters>
+                <v-col cols=11>
+                    <div class="d-flex justify-start">
+                        <div v-if="tab == 0" class="my-auto pr-2">選擇日期</div>
+
+                        <v-btn v-if="tab == 1" icon class="my-auto" @click="switchTab(0)">
+                            <v-icon>mdi-arrow-left</v-icon></v-btn>
+                        <div v-if="tab == 1" class="my-auto pr-2">事件清單</div>
+
+
+
+                        <div style="width: 350px;" class="my-auto">
+                            <input :disabled="tab === 1" type="text" id="datetimerange-input1" size="40"
+                                class="v-field__input"
+                                style="text-align:center;border: 1px solid grey; height:39px;border-radius: 5px;"
+                                :style="{
+                                    border: tab === 1 ? '1px solid #C5C5C5' : '1px solid grey',
+                                    color: tab === 1 ? '#C5C5C5' : 'black'
+                                }">
+                        </div>
+
+
+                        <div>
+                            <v-menu v-model="menu" :close-on-content-click="false" location="end" treeLine>
+                                <template v-slot:activator="{ props }">
+                                    <v-btn :disabled="desserts.length === 0" class="my-auto justify-end "
+                                        color="#BF444C" variant="flat" v-bind="props" style="margin: 0px 0px">
+                                        警報次數 {{ desserts.length }}
+                                    </v-btn>
+                                </template>
+                                <v-card>
+                                    <v-card-text class="pa-2">
+                                        <BaseTree v-model="formattedEvents" table>
+                                            <template #prepend="{ tree }">
+                                                <thead>
+                                                    <tr>
+                                                        <th v-if="!tree.dragOvering"></th>
+                                                        <th align="left">警報發生日期</th>
+                                                        <th>警報次數</th>
+                                                    </tr>
+                                                </thead>
+                                            </template>
+
+                                            <template #default="{ node, stat, indentStyle, tree }">
+                                                <td v-if="!tree.dragOvering">
+                                                    <v-icon v-if="stat.children.length && stat.open" size="20"
+                                                        @click.native="stat.open = !stat.open">
+                                                        mdi-menu-down
+                                                    </v-icon>
+                                                    <v-icon v-else-if="stat.children.length && !stat.open" size="20"
+                                                        @click.native="stat.open = !stat.open">
+                                                        mdi-menu-right
+                                                    </v-icon>
+                                                    <v-icon v-else size="20" color="transparent">
+                                                        mdi-menu-right
+                                                    </v-icon>
+                                                </td>
+                                                <td :style="indentStyle">
+                                                    {{ node.text }}
+                                                </td>
+                                                <td align="center">
+                                                    <v-chip :color="node.count > 20 ? color[19] : color[node.count - 1]"
+                                                        variant="flat" :size="stat.level === 1 ? 'default' : 'x-small'">
+                                                        {{ node.count }}
+                                                    </v-chip>
+                                                </td>
+                                            </template>
+                                        </BaseTree>
+                                    </v-card-text>
+                                </v-card>
+                            </v-menu>
+                        </div>
+
+
+                        <div v-if="tab == 1" class="my-auto px-2" style="color:#adadad">警報發生時間: </div>
+
+                        <div v-if="tab == 1" style="width: 350px;" class="my-auto">
+                            {{ parentsData.alarmEvent_startTime }} -
+                            {{ parentsData.alarmEvent_endTime }}
+                        </div>
+                    </div>
+
+                </v-col>
+
+
+
+
+
+
+
+                <v-col cols="1" class="text-right">
+                    <v-btn v-if="tab == 1" class="my-auto justify-end" color="#6795D4" variant="flat">確認事件</v-btn>
+                </v-col>
+            </v-row>
+        </v-toolbar>
+
+
+
+
+        <v-dialog v-model="dialog" max-width="500px">
+            <template v-slot:activator="{ props }">
+                <!-- <v-btn class="mb-2" color="primary" dark v-bind="props">
+                                New Item
+                            </v-btn> -->
+            </template>
+            <v-card>
+                <v-card-title>
+                    <!-- <span class="text-h5">{{ formTitle }}</span> -->
+                </v-card-title>
+
+                <v-card-text>
+                    <v-container>
+                        <v-row>
+                            <v-col cols="12" md="4" sm="6">
+                                <v-text-field v-model="editedItem.alarmEvent_image_URL"
+                                    label="Dessert alarmEvent_image_URL"></v-text-field>
+                            </v-col>
+                            <v-col cols="12" md="4" sm="6">
+                                <v-text-field v-model="editedItem.alarmEvent_startTime" label="Calories"></v-text-field>
+                            </v-col>
+                            <v-col cols="12" md="4" sm="6">
+                                <v-text-field v-model="editedItem.alarmEvent_DOTriggered_startTime"
+                                    label="Fat (g)"></v-text-field>
+                            </v-col>
+                            <v-col cols="12" md="4" sm="6">
+                                <v-text-field v-model="editedItem.cursingPoint_image_URL"
+                                    label="Carbs (g)"></v-text-field>
+                            </v-col>
+                            <v-col cols="12" md="4" sm="6">
+                                <v-text-field v-model="editedItem.alarmEvent_cameraName"
+                                    label="Protein (g)"></v-text-field>
+                            </v-col>
+                        </v-row>
+                    </v-container>
+                </v-card-text>
+
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="blue-darken-1" variant="text" @click="close">
+                        Cancel
+                    </v-btn>
+                    <v-btn color="blue-darken-1" variant="text" @click="save">
+                        Save
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+        <v-dialog v-model="dialogDelete" max-width="500px">
+            <v-card>
+                <v-card-title class="text-h5">Are you sure you want to delete this item?</v-card-title>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="blue-darken-1" variant="text" @click="closeDelete">Cancel</v-btn>
+                    <v-btn color="blue-darken-1" variant="text" @click="deleteItemConfirm">OK</v-btn>
+                    <v-spacer></v-spacer>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+
+        <!-- <v-btn @click="t1233()">132</v-btn> -->
+
+        <div style="height:780px;overflow: scroll;">
+
+            <v-data-table :headers="headers" :items="desserts"
+                :sort-by="[{ key: 'alarmEvent_startTime', order: 'asc' }]" hide-default-footer items-per-page="-1">
+
+
+                <template v-slot:item.alarmEvent_image_URL="{ item }">
+                    <v-menu open-on-hover location="end">
+                        <template v-slot:activator="{ props }">
+                            <div class="d-flex justify-space-evenly" v-bind="props">
+                                <v-img width="100"
+                                    :src="`http://localhost:5002/api/alarmEvent/share/${encodeBackslash(item.alarmEvent_image_URL.ir)}`"
+                                    class="ma-1" />
+                                <v-img width="100"
+                                    :src="`http://localhost:5002/api/alarmEvent/share/${encodeBackslash(item.alarmEvent_image_URL.vis)}`"
+                                    class="ma-1" />
+                                <!-- <v-img width="100" src="http://localhost:5002/api/database/share" class="ma-1" /> -->
+                                <!-- <v-img width="100" src="http://localhost:5002/api/database/share" class="ma-1" /> -->
+                            </div>
+                        </template>
+                        <v-card class="d-flex justify-space-evenly">
+                            <v-img width="400"
+                                :src="`http://localhost:5002/api/alarmEvent/share/${encodeBackslash(item.alarmEvent_image_URL.ir)}`"
+                                class="ma-1" />
+                            <v-img width="400"
+                                :src="`http://localhost:5002/api/alarmEvent/share/${encodeBackslash(item.alarmEvent_image_URL.vis)}`"
+                                class="ma-1" />
+                            <!-- <v-img width="400" src="http://localhost:5002/api/database/share" class="ma-1" />
+                        <v-img width="400" src="http://localhost:5002/api/database/share" class="ma-1" /> -->
+                        </v-card>
+                    </v-menu>
+                </template>
+
+                <template v-slot:item.alarmEvent_startTime="{ item }">
+                    <div class="">發生 {{ item.alarmEvent_startTime }}</div>
+                    <div class="">結束 {{ item.alarmEvent_endTime }}</div>
+                </template>
+
+                <template v-slot:item.alarmEvent_DOTriggered_startTime="{ item }">
+                    <div class="">觸發成功</div>
+                    <div class="">發生 {{ item.alarmEvent_DOTriggered_startTime }}</div>
+                    <div class="">結束 {{ item.alarmEvent_DOTriggered_endTime }}</div>
+                </template>
+
+                <template v-slot:item.alarmEvent_cursingPoint_name="{ item }">
+
+                    <div class="">{{ item.alarmEvent_cursingPoint_name }}</div>
+                    <div class="">{{ item.alarmEvent_occur_gps[0] }},&nbsp;&nbsp;&nbsp;{{ item.alarmEvent_occur_gps[1]
+                        }}
+                    </div>
+                </template>
+
+                <template v-slot:item.alarmEvent_roi_alarmStatus="{ item }">
+                    <div class="">{{ item.alarmEvent_roi_alarmStatus === 1 ? "一級超溫警報" : item.alarmEvent_roi_alarmStatus
+                        ===
+                        2 ?
+                        "二級超溫警報" : "" }}</div>
+
+                </template>
+
+                <template v-slot:item.alarmEvent_roi_maxTemperature="{ item }">
+                    <div class="">{{ item.alarmEvent_roi_maxTemperature }} °C</div>
+                </template>
+
+                <template v-slot:item.alarmEvent_roi_threshold="{ item }">
+                    <div class="">{{ item.alarmEvent_roi_threshold }} °C</div>
+                </template>
+
+                <template v-slot:item.alarmEvent_resolvedType="{ item }">
+                    <div class="">{{ item.alarmEvent_roi_alarmStatus === 1 ? "手動關閉警報" : item.alarmEvent_roi_alarmStatus
+                        ===
+                        2 ?
+                        "自動解除" : "" }}</div>
+                </template>
+
+                <template v-slot:item.link="{ item }">
+                    <v-btn icon @click="getVideoNChart(item), getVideoNChart2(item), getVideoNChart3(item)"
+                        variant="text">
+                        <v-icon>mdi-open-in-new</v-icon>
+                        <div style="font-size: 8px;">{{ item.alarmEvent_id }}</div>
+
+                    </v-btn>
+                </template>
+                <!-- <template v-slot:item.actions="{ item }">
+                <v-icon class="me-2" size="small" @click="editItem(item)">
+                    mdi-pencil
+                </v-icon>
+                <v-icon size="small" @click="deleteItem(item)">
+                    mdi-delete
+                </v-icon>
+            </template>
+            <template v-slot:no-data>
+                <v-btn color="primary" @click="initialize">
+                    Reset
+                </v-btn>
+            </template> -->
+            </v-data-table>
+        </div>
+        <!-- <div v-else-if="tab === 1">
+            <client-only>
+                <SettingTablesAlertChart :myProp="parentsData"></SettingTablesAlertChart>
+            </client-only>
+        </div> -->
+
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { BaseTree } from '@he-tree/vue'
+import '@he-tree/vue/style/default.css'
+import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
+
+
+
+// const vedioSrc1 ="http://localhost:5002/api/alarmEvent/share/.%5C%5CalarmEvent%5C%5C56%5C%5CalarmIR.mp4"
+
+const vedioSrc = ref("")
+const vedioSrc2 = ref("")
+const vedioSrcReplace = ref("")
+const vedioSrc2Replace = ref("")
+
+
+
+
+
+
+
+const videoNChart = ref({
+    "echart_overallStatus": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_roiTemp": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_dymanicMask": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_doStatus": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "table_info": {
+        "echart_data": [],
+        "markarea": []
+    },
+    "alarmEvent_video_URL": {
+        "ir": "",
+        "vis": ""
+    }
+})
+
+
+const videoNChartReplace = ref({
+    "echart_overallStatus": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_roiTemp": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_dymanicMask": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "echart_doStatus": {
+        "echart_data": [],
+        "markarea": {
+            "data": []
+        }
+    },
+    "table_info": {
+        "echart_data": [],
+        "markarea": []
+    },
+    "alarmEvent_video_URL": {
+        "ir": "",
+        "vis": ""
+    }
+})
+
+const menu = ref(false)
+const color = ref([
+    "#F3E4A1",
+    "#F0D99C",
+    "#EDCE97",
+    "#EAC392",
+    "#E7B98D",
+    "#E4AE87",
+
+    "#E1A382",
+    "#DE987D",
+    "#DB8D78",
+    "#D88273",
+
+    "#D67C6F",
+    "#D3766B",
+    "#D16F67",
+    "#CE6963",
+    "#CC6360",
+
+    "#C95D5C",
+    "#C75758",
+    "#C45054",
+    "#C24A50",
+    "#BF444C"
+])
+
+
+
+
+const ws5 = ref(null)
+
+function encodeBackslash(input) {
+    return input.replace(/\\/g, '%5C%5C');
+}
+
+
+const tab = ref(0)
+const switchTab = (n) => {
+    tab.value = n
+}
+
+const parentsData = ref({})
+
+
+const sendData = (n) => {
+    parentsData.value = n
+}
+
+
+
+
+
+const select = ref({ state: 'Florida', abbr: 'FL' })
+const items = ref([
+    { state: 'Florida', abbr: 'FL' },
+    { state: 'Georgia', abbr: 'GA' },
+    { state: 'Nebraska', abbr: 'NE' },
+    { state: 'California', abbr: 'CA' },
+    { state: 'New York', abbr: 'NY' },
+])
+const dialog = ref(false);
+const dialogDelete = ref(false);
+const headers = ref([
+    { title: '影像', align: 'center', sortable: true, key: 'alarmEvent_image_URL' },
+    { title: '警報發生時間', align: 'center', sortable: true, key: 'alarmEvent_startTime' },
+    { title: 'DIO觸發時間', align: 'center', sortable: true, key: 'alarmEvent_DOTriggered_startTime' },
+    { title: '發生位置', align: 'center', sortable: true, key: 'alarmEvent_occur_locationName' },
+    { title: '偵測相機名稱', align: 'center', sortable: true, key: 'alarmEvent_cameraName' },
+    { title: '預設點編號', align: 'center', sortable: true, key: 'alarmEvent_cursingPoint_name' },
+    { title: '警報類型', align: 'center', sortable: true, key: 'alarmEvent_roi_alarmStatus' },
+    { title: '最高溫度', align: 'center', sortable: true, key: 'alarmEvent_roi_maxTemperature' },
+    { title: '警報閾值', align: 'center', sortable: true, key: 'alarmEvent_roi_threshold' },
+    { title: '事件處理', align: 'center', sortable: true, key: 'alarmEvent_resolvedType' },
+    { title: '', align: 'center', sortable: false, key: 'link' },
+
+    // { title: 'Actions', key: 'actions', sortable: false },
+]);
+const desserts = ref([]);
+const editedIndex = ref(-1);
+const editedItem = ref({
+    alarmEvent_filed_id: 0,
+    alarmEvent_filed_name: '',
+    alarmEvent_id: 0,
+    alarmEvent_startTime: 0,
+    alarmEvent_endTime: 0,
+    alarmEvent_DOTriggered_startTime: 0,
+    alarmEvent_DOTriggered_endTime: 0,
+    alarmEvent_occur_locationName: 0,
+    alarmEvent_occur_location: 0,
+    alarmEvent_occur_gps: 0,
+    alarmEvent_roi_threshold: 0,
+    alarmEvent_roi_thresholdSystem: 0,
+    alarmEvent_roi_thresholdManual: 0,
+    alarmEvent_roi_alarmStatus: 0,
+    alarmEvent_roi_maxTemperature: 0,
+    alarmEvent_cursingPoint_name: 0,
+    alarmEvent_resolvedType: 0,
+    alarmEvent_cameraID: 0,
+    alarmEvent_cameraName: 0,
+    alarmEvent_image_URL: 0
+});
+const defaultItem = {
+    alarmEvent_filed_id: 0,
+    alarmEvent_filed_name: '',
+    alarmEvent_id: 0,
+    alarmEvent_startTime: 0,
+    alarmEvent_endTime: 0,
+    alarmEvent_DOTriggered_startTime: 0,
+    alarmEvent_DOTriggered_endTime: 0,
+    alarmEvent_occur_locationName: 0,
+    alarmEvent_occur_location: 0,
+    alarmEvent_occur_gps: 0,
+    alarmEvent_roi_threshold: 0,
+    alarmEvent_roi_thresholdSystem: 0,
+    alarmEvent_roi_thresholdManual: 0,
+    alarmEvent_roi_alarmStatus: 0,
+    alarmEvent_roi_maxTemperature: 0,
+    alarmEvent_cursingPoint_name: 0,
+    alarmEvent_resolvedType: 0,
+    alarmEvent_cameraID: 0,
+    alarmEvent_cameraName: 0,
+    alarmEvent_image_URL: 0
+};
+
+const formTitle = computed(() => (editedIndex.value === -1 ? 'New Item' : 'Edit Item'));
+
+const initialize = () => {
+    desserts.value = [
+        // {
+        //     alarmEvent_filed_id: 0,
+        //     alarmEvent_filed_name: "",
+        //     alarmEvent_id: 0,
+        //     alarmEvent_startTime: "",
+        //     alarmEvent_endTime: "",
+        //     alarmEvent_DOTriggered_startTime: "",
+        //     alarmEvent_DOTriggered_endTime: "",
+        //     alarmEvent_occur_locationName: "",
+        //     alarmEvent_occur_location: 0,
+        //     alarmEvent_occur_gps: [0, 0],
+        //     alarmEvent_roi_threshold: 0,
+        //     alarmEvent_roi_thresholdSystem: 0,
+        //     alarmEvent_roi_thresholdManual: 0,
+        //     alarmEvent_roi_alarmStatus: 0,
+        //     alarmEvent_roi_maxTemperature: 0,
+        //     alarmEvent_cursingPoint_name: "",
+        //     alarmEvent_resolvedType: 0,
+        //     alarmEvent_cameraID: 0,
+        //     alarmEvent_cameraName: "",
+        //     alarmEvent_image_URL: { ir: "", vis: "" }
+        // },
+    ];
+};
+
+const editItem = (item) => {
+    editedIndex.value = desserts.value.indexOf(item);
+    editedItem.value = { ...item };
+    dialog.value = true;
+};
+
+const deleteItem = (item) => {
+    editedIndex.value = desserts.value.indexOf(item);
+    editedItem.value = { ...item };
+    dialogDelete.value = true;
+};
+
+const deleteItemConfirm = () => {
+    desserts.value.splice(editedIndex.value, 1);
+    closeDelete();
+};
+
+const close = () => {
+    dialog.value = false;
+    nextTick(() => {
+        editedItem.value = { ...defaultItem };
+        editedIndex.value = -1;
+    });
+};
+
+const closeDelete = () => {
+    dialogDelete.value = false;
+    nextTick(() => {
+        editedItem.value = { ...defaultItem };
+        editedIndex.value = -1;
+    });
+};
+
+const save = () => {
+    if (editedIndex.value > -1) {
+        Object.assign(desserts.value[editedIndex.value], editedItem.value);
+    } else {
+        desserts.value.push(editedItem.value);
+    }
+    close();
+};
+
+const dateSelected = ref(0)
+
+
+function getVideoNChart(e) {
+    vedioSrc.value = vedioSrcReplace.value
+    vedioSrc2.value = vedioSrc2Replace.value
+    ws5.value.send(
+        JSON.stringify({
+            "feature": "history_alarm",
+            "method": "query_detail_overTempEvent",
+            "content": {
+                "alarmEvent_filed_id": parseInt(e.alarmEvent_filed_id),
+                "alarmEvent_id": parseInt(e.alarmEvent_id)
+            },
+            "session": "sckji8452s"
+        })
+    );
+}
+
+
+function getVideoNChart2(e) {
+    vedioSrc.value = vedioSrcReplace.value
+    vedioSrc2.value = vedioSrc2Replace.value
+    ws5.value.send(
+        JSON.stringify({
+            "feature": "history_alarm",
+            "method": "query_detail_overTempEvent",
+            "content": {
+                "alarmEvent_filed_id": parseInt(e.alarmEvent_filed_id),
+                "alarmEvent_id": parseInt(e.alarmEvent_id)
+            },
+            "session": "sckji8452s"
+        })
+    );
+}
+
+function getVideoNChart3(e) {
+    vedioSrc.value = vedioSrcReplace.value
+    vedioSrc2.value = vedioSrc2Replace.value
+    ws5.value.send(
+        JSON.stringify({
+            "feature": "history_alarm",
+            "method": "query_detail_overTempEvent",
+            "content": {
+                "alarmEvent_filed_id": parseInt(e.alarmEvent_filed_id),
+                "alarmEvent_id": parseInt(e.alarmEvent_id)
+            },
+            "session": "sckji8452s"
+        })
+    );
+}
+
+
+
+
+
+
+function ws8704() {
+    //! ws5
+    ws5.value = new WebSocket("ws://localhost:8704");
+    ws5.value.onopen = () => {
+        console.log("websocket 8704 命令/查詢通道 已連線!!!!!");
+
+        ws5.value.send(
+            JSON.stringify({
+                feature: "history_alarm",
+                method: "query_OverTemperature",
+                content: {
+                    filed_id: [1, 2],
+                    alarmEvent_startTime: getTodayDateRange().start,
+                    alarmEvent_endTime: getTodayDateRange().end
+                },
+                session: "sckji8452s"
+            })
+        );
+    };
+
+    ws5.value.onmessage = (params1) => {
+        var params = {
+            data: JSON.parse(params1.data),
+        };
+
+        console.log("gauidakidgd", params.data);
+
+        // if (params.method !== undefined) {
+        if (params.data.method == "query_detail_overTempEvent") {
+            console.log("1234456", `http://localhost:5002/api/alarmEvent/share/${vedioSrc.value}`);
+            vedioSrc.value = `http://localhost:5002/api/alarmEvent/share/${encodeBackslash(params.data.content.alarmEvent_video_URL.ir)}`
+            vedioSrc2.value = `http://localhost:5002/api/alarmEvent/share/${encodeBackslash(params.data.content.alarmEvent_video_URL.vis)}`
+
+
+
+        }
+        // }
+        if (params.data instanceof Array) {
+            desserts.value = params.data
+            console.log("dskjsksk", params.data);
+        } else {
+            console.log("dskjsksk123333", params.data);
+
+        }
+
+    };
+}
+
+
+
+
+useHead({
+    // title: 'vanilla-datetimerange-picker simple example',
+    meta: [
+        { charset: 'UTF-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, shrink-to-fit=no' }
+    ],
+    link: [
+        {
+            rel: 'stylesheet',
+            type: 'text/css',
+            href: '/css/vanilla-datetimerange-picker-dark.css'
+        }
+    ],
+    script: [
+        {
+            src: '/js/moment.min.js',
+            type: 'text/javascript'
+        },
+        {
+            src: '/js/vanilla-datetimerange-picker.js',
+            type: 'text/javascript'
+        }
+    ],
+    style: [
+        { children: 'body { color: white; background-color: #fff; }' }
+    ]
+})
+
+
+function convertISOToCustomFormat(isoString) {
+    const date = new Date(isoString);
+
+    // 提取年、月、日、小时、分钟和秒
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以需要加1
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+
+    // 格式化为 'YYYY-MM-DD HH:MM:SS'
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+
+function getTodayDateRange() {
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+    return {
+        start: convertISOToCustomFormat(startDate),
+        end: convertISOToCustomFormat(endDate)
+    };
+}
+
+
+
+dateSelected.value = getTodayDateRange().start + " " + "-" + " " + getTodayDateRange().end;
+
+
+
+
+
+
+
+// const isoString = "2024-07-17T00:00:00+08:00";
+// const formattedString = convertISOToCustomFormat(isoString);
+
+// console.log(formattedString); // 输出：2024-07-17 00:00:00
+
+
+// watch(tab, (newValue, oldValue) => {
+
+
+// });
+
+
+const formattedEvents = computed(() => {
+    const eventsByDate = {};
+
+    desserts.value.forEach(event => {
+        const date = event.alarmEvent_startTime.split(' ')[0];
+        const hour = parseInt(event.alarmEvent_startTime.split(' ')[1].split(':')[0]);
+
+        if (!eventsByDate[date]) {
+            eventsByDate[date] = {
+                text: date,
+                count: 0,
+                children: []
+            };
+        }
+
+        eventsByDate[date].count++;
+
+        const hourRange = `${hour.toString().padStart(2, '0')}:00:00 ~ ${(hour + 1).toString().padStart(2, '0')}:00:00`;
+        let hourEvent = eventsByDate[date].children.find(child => child.text.includes(hourRange));
+
+        if (!hourEvent) {
+            hourEvent = {
+                text: `於 ${hourRange} 間發生警報`,
+                count: 0
+            };
+            eventsByDate[date].children.push(hourEvent);
+        }
+
+        hourEvent.count++;
+    });
+
+    return Object.values(eventsByDate);
+});
+
+
+
+
+onMounted(() => {
+
+
+
+
+
+
+    initialize();
+    ws8704()
+
+    let drp = new DateRangePicker('datetimerange-input1', {
+        timePicker: true,
+        alwaysShowCalendars: true,
+        timePickerSeconds: true,
+        // ranges: {
+        //     'Today': [moment().startOf('day'), moment().endOf('day')],
+        //     'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+        //     'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
+        //     'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
+        // },
+        locale: {
+            format: "YYYY-MM-DD HH:mm:ss",
+        }
+    }, function (start, end) {
+        console.log("ertergreg", convertISOToCustomFormat(start.format()));
+        console.log("ertergreg", convertISOToCustomFormat(end.format()));
+
+        dateSelected.value = convertISOToCustomFormat(start.format()).toString() + " " + "-" + " " + convertISOToCustomFormat(end.format()).toString()
+
+        ws5.value.send(
+            JSON.stringify({
+                feature: "history_alarm",
+                method: "query_OverTemperature",
+                content: {
+                    filed_id: [1, 2],
+                    alarmEvent_startTime: convertISOToCustomFormat(start.format()).toString(),
+                    alarmEvent_endTime: convertISOToCustomFormat(end.format()).toString()
+                },
+                session: "sckji8452s"
+            })
+        );
+
+
+        // alert(start.format() + " - " + end.format());
+    });
+
+    window.addEventListener('apply.daterangepicker', function (ev) {
+        console.log(ev.detail.startDate.format('YYYY-MM-DD'));
+        console.log(ev.detail.endDate.format('YYYY-MM-DD'));
+    });
+});
+
+
+
+
+
+
+
+
+
+</script>
+<style lang="scss">
+@use './settings';
+</style>
+<style>
+.top-header {
+    padding: 10px;
+    border: 1px solid grey
+}
+</style>

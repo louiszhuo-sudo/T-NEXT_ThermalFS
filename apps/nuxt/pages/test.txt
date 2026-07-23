@@ -1,0 +1,697 @@
+<template>
+    <div class="container-canvas pa-3" @mousemove="mousemove" @mouseup="mouseup">
+        <div class="item-canvas">
+            <div class="item-card-top d-flex">
+                <div class="item-select" style="width:100px">
+                    <v-select :items="state.areaItems" v-model="state.area" dense outlined hide-details
+                        full-width></v-select>
+                </div>
+                <div class="item-select ml-3" style="width:100px">
+                    <v-select :items="state.cameraItems" v-model="state.camera" dense outlined hide-details
+                        full-width></v-select>
+                </div>
+                <!-- <div class="d-flex">
+                    <div style="width: 100px;">
+                        <v-text-field v-model="speed" label="speed" type="number" min="0" required dense
+                            hide-details></v-text-field>
+                    </div>
+                </div>
+                <div class="d-flex">
+                    <div style="width: 100px;">
+                        <v-text-field v-model="rotate" label="rotate" type="number" min="0" required dense
+                            hide-details></v-text-field>
+                    </div>
+                </div>
+                <div class="d-flex">
+                    <div style="width: 100px;">
+                        <v-text-field v-model="radius" label="radius" type="number" min="0" step="5" required dense
+                            hide-details></v-text-field>
+                    </div>
+                </div> -->
+                <v-btn @click="putVideo()">切換預覽模式</v-btn>
+                <v-btn @click="requestBtnGroupEvent('remove')">清除</v-btn>
+                <v-btn @click="requestBtnGroupEvent('spot')">spot</v-btn>
+                <v-btn @click="requestBtnGroupEvent('line')">line</v-btn>
+                <v-btn @click="requestBtnGroupEvent('scope')">scope</v-btn>
+                <v-btn @click="requestBtnGroupEvent('blob')" id='hint-0001'>blob</v-btn>
+                <div class="item-select ml-3" style="width:100px">
+                    <v-select :items="state.mainModeItems" v-model="state.mainMode" dense outlined hide-details
+                        full-width></v-select>
+                </div>
+            </div>
+            <div class="item-card-content" id="map-top-b" style="z-index: 0;">
+                <!-- <mapImport ref="mapImport1" :wsRoiData="wsRoiData" :mainMode="mainMode" /> -->
+                <ClientOnly>
+                    <MapDefault ref="mapImport1" :formtData="state" :mainMode="[]" @dataFromChild="handleDataFromChild"
+                        :mainProps="''" :camID="1" camType="vis" :usePhoto="true" />
+                </ClientOnly>
+                <!-- map -->
+                <!-- <l-map :ref="'map'" :min-zoom="minZoom" :crs="crs" style="height: 100%; width: 100%" @ready="runIndex++"
+                    :options="mapOptions"> -->
+                <!-- <l-image-overlay :url="url" :bounds="bounds" /> -->
+                <!-- <l-marker v-for="star in stars" :key="star.name" :lat-lng="star">
+            <l-popup :content="star.name" />
+          </l-marker> -->
+                <!-- <l-polyline :lat-lngs="travel" /> -->
+                <!-- </l-map> -->
+            </div>
+        </div>
+        <div class="item-canvas">
+            <div class="item-card-top">
+                <div>
+                    <span class="item-878787">路徑名稱</span>
+                </div>
+                <div>
+                    <span class="item-878787" style="font-size:12px">
+                        總時長 | 預設點數量
+                    </span>
+                </div>
+            </div>
+            <div class="item-card-content" :class="state.pathList.length > 0 ? '' : 'bg-f1f1f1ba'"
+                style="height: 784px;overflow: auto;">
+                <template v-if="state.pathList.length > 0">
+                    <div class="d-flex my-1 def-point-item" v-for="(item, index) in state.pathList"
+                        @mousedown="mousedown" @mouseover="mouseover" @mouseleave="mouseleave" :data-index="index"
+                        data-type="pathItem" style="cursor: ns-resize;">
+                        <div class="def-point-grid pa-1" style="pointer-events: none;">
+                            <div class="def-point-id">
+                                <div class="def-point-number">
+                                    <div>
+                                        {{ index + 1 }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="def-point-conent px-4">
+                                <div class="def-point-name">{{ item.name }}</div>
+                                <div class="def-point-stoptime item-878787">停留時間 {{ item.stoptime }} 分鐘 | ROI警報</div>
+                            </div>
+                            <div class="def-point-meun" style="opacity: 0;pointer-events: none;">
+                                <div class="def-point-meun-btn mr-1">
+                                    <NuxtImg src="/images/fs/icon/editeidt.svg" />
+                                </div>
+                                <div class="def-point-meun-btn mr-1">
+                                    <NuxtImg src="/images/fs/icon/deletedelect.svg" />
+                                </div>
+                                <div class="def-point-meun-btn">
+                                    <NuxtImg src="/images/fs/icon/showimage.svg" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template v-else>
+                    <div class="item-hint-message">
+                        <span class="item-878787">選擇路徑編輯</span>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <div class="item-grid">
+            <div class="item-canvas">
+                <div class="item-card-top d-flex justify-space-between align-center">
+                    <div class="v-c-btn">
+                        <NuxtImg src="/images/fs/searchsreach.svg" width="30" />
+                    </div>
+                    <div class="d-flex align-center">
+                        <div class="v-c-btn item-AEBBC3">選取</div>
+                        <div class="v-c-btn item-AEBBC3 ml-2">切換預覽畫面</div>
+                        <div class="v-c-btn ml-2">
+                            <NuxtImg src="/images/fs/addadd.svg" width="30" />
+                        </div>
+                        <div class="item-select ml-2" style="width:100px">
+                            <v-select :items="state.cameraItems" v-model="state.camera" dense outlined hide-details
+                                full-width></v-select>
+                        </div>
+                    </div>
+                </div>
+                <div class="item-card-content" :class="state.cameraList.length > 0 ? '' : 'bg-f1f1f1ba'"
+                    style="height: 450px;overflow: auto;">
+                    <template v-if="state.cameraList.length > 0">
+                        <div class="cameraList-gird">
+                            <div v-for="item in state.cameraList" class="cameraList-item pa-1">
+                                <div class="camera-canvas">
+                                    <img :src="item.img" width="100%"></img>
+                                </div>
+                                <div>{{ item.name }}</div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <div class="item-hint-message">
+                            <div style="width:270px;">
+                                <NuxtImg src="/images/fs/Group 8524selectcamera.svg" />
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div class="item-canvas">
+                <div class="item-card-top d-flex justify-space-between align-center">
+                    <div>
+                        <span class="item-878787">預設點名稱</span>
+                    </div>
+                    <div class="d-flex align-center">
+                        <div class="v-c-btn item-AEBBC3 ml-2">切換預覽模式</div>
+                        <div class="v-c-btn ml-2">
+                            <NuxtImg src="/images/fs/settingsetting.svg" width="30" />
+                        </div>
+                    </div>
+                </div>
+                <div class="item-card-content" :class="state.defaultPorintList.length > 0 ? '' : 'bg-f1f1f1ba'">
+                    <template v-if="state.defaultPorintList.length > 0">
+                        <div>123</div>
+                        <!-- <mapImport ref="mapImport1" :wsRoiData="wsRoiData" /> -->
+                    </template>
+                    <template v-else>
+                        <div class="item-hint-message">
+                            <span class="item-878787">預設點預覽</span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        <div id="temp-copy-object"></div>
+        <div id="message">
+        </div>
+        <!-- <umsdataelement id="UMSDataElement" style="display: none;"></umsdataelement> -->
+        <div id="tmtoolbar_manual_rating_injected" style="display: none;">init</div>
+        <div id="UMSSendDataEventElement" style="display: none;">init</div>
+        <div class="object"></div>
+        <div class="recorder-canvas">
+            <a id="recorder-start">錄製</a>
+            <a id="recorder-stop" class="vdisplay">停止錄製</a>
+            <div>已錄製: {{ state.recoderTime }}</div>
+        </div>
+    </div>
+</template>
+<script setup>
+const { $webSocketconnect05 } = useNuxtApp()
+const mapImport1 = ref(null)
+const state = reactive({
+    mainMode: 'roi', // review = 監控模式 ,roi = ROI模式,mask = MASK模式,mask-temp-select = 溫度區域選取模式
+    mainModeItems: ['review', 'roi', 'mask', 'mask-temp-select'],
+    wsRoiData1: null,
+    recoderTime: 0,
+    rtcPeerConnectionItems: [],
+    rtcVIDEOLIST: {
+        vis: null,
+        ir: null
+    },
+    rtcVIDETYPE: 'vis',
+    ws3: {
+        readyState: 0
+    },
+    wsListener3: {
+        close: null,
+        message: null
+    }, ws5: {
+        readyState: 0
+    },
+    wsListener5: {
+        close: null,
+        message: null
+    },
+    areaItems: ['area 1'],
+    area: 'area 1',
+    cameraItems: ['P640'],
+    camera: 'P640',
+    pathList: [
+        {
+            name: '六號出口',
+            stoptime: 10,
+            alarm: false,
+        }
+    ],
+    cameraList: [
+        {
+            img: '/mock/ir13802.jpg',
+            name: '港口000'
+        }
+    ],
+    defaultPorintList: [],
+    tempHoverDiv: null,
+    // 紀錄滑鼠位置
+    mousedownLocations: { // 暫存滑鼠點擊第一位置
+        x: 0,
+        y: 0
+    },
+    tempPathItemDiv: null,
+    tempPathItemDivLocaltion: {
+        x: 0,
+        y: 0
+    },
+    tempMoveFocusDiv: {
+        div: null,
+        up: null,
+        down: null
+    },
+    saveIndex: {
+        old: 0,
+        new: 0
+    }
+})
+// ---------------
+
+const handleDataFromChild = (data) => {
+    console.log('Received data from child:', data)
+}
+const putVideo = () => {
+    // $refs.mapImport1.putVideo()
+}
+const requestBtnGroupEvent = (data) => {
+    // 接收btnGroup 資料傳送至pixijscanvas1
+    mapImport1.value.requestBtnGroupEvent(data)
+}
+const mouseover = (e) => {
+    const elementsWithClass = e.target.getElementsByClassName('def-point-meun');
+    if (elementsWithClass.length > 0) {
+        elementsWithClass[0].style.opacity = 1
+        elementsWithClass[0].style.pointerEvents = 'auto'
+        state.tempHoverDiv = elementsWithClass[0]
+    }
+}
+const mousemove = (e) => {
+    var type = e.target.getAttribute('data-type') // .parentNode
+    if (type === 'pathItem' && state.tempPathItemDiv !== null) {
+        var index = e.target.getAttribute('data-index')
+        state.saveIndex.new = parseInt(index)
+        var location = e.target.getBoundingClientRect() // 讀取被觸發的物件
+        if (state.tempMoveFocusDiv.div !== e.target) {
+            state.tempMoveFocusDiv.div = e.target
+            if (state.tempMoveFocusDiv.down !== null) {
+                state.tempMoveFocusDiv.down.remove();
+                state.tempMoveFocusDiv.down = null
+            }
+            if (state.tempMoveFocusDiv.up !== null) {
+                state.tempMoveFocusDiv.up.remove();
+                state.tempMoveFocusDiv.up = null
+            }
+        }
+        if (e.offsetY < (location.height / 2)) {
+            if (state.tempMoveFocusDiv.up === null) {
+                var newdiv = document.createElement('div')
+                newdiv.classList.add('path-add-message');
+                newdiv.innerHTML = '<div></div>'
+                state.tempMoveFocusDiv.up = newdiv
+                e.target.parentNode.insertBefore(newdiv, e.target);
+                if (state.tempMoveFocusDiv.down !== null) {
+                    state.tempMoveFocusDiv.down.remove();
+                    state.tempMoveFocusDiv.down = null
+                }
+            }
+        } else {
+            if (state.tempMoveFocusDiv.down === null) {
+                var newdiv = document.createElement('div')
+                newdiv.classList.add('path-add-message');
+                newdiv.innerHTML = '<div></div>'
+                state.tempMoveFocusDiv.down = newdiv
+                e.target.insertAdjacentElement('afterend', newdiv);
+                if (state.tempMoveFocusDiv.up !== null) {
+                    state.tempMoveFocusDiv.up.remove();
+                    state.tempMoveFocusDiv.up = null
+                }
+            }
+        }
+    }
+    if (state.tempPathItemDiv !== null) { // 判斷是否有抓取路徑table item
+        var copyDiv = document.getElementById('temp-copy-object') // 宣告克隆物件內容
+        var location = {
+            x: 0,
+            y: 0
+        }
+        location.y = state.mousedownLocations.y - e.y
+        location.x = state.mousedownLocations.x - e.x
+        copyDiv.style.top = state.tempPathItemDivLocaltion.y - location.y + 'px'
+        copyDiv.style.left = state.tempPathItemDivLocaltion.x - location.x + 'px'
+    }
+}
+const mouseup = (e) => {
+    if (state.tempPathItemDiv !== null) {
+        state.tempPathItemDiv = null
+        var copyDiv = document.getElementById('temp-copy-object') // 宣告克隆物件內容
+        copyDiv.innerHTML = '' // 清空克隆物件內容
+        var arr = state.pathList
+        const valueToMove = arr.splice(state.saveIndex.old, 1)[0];
+        arr.splice(state.saveIndex.new, 0, valueToMove);
+        state.pathList = arr
+    }
+}
+const mousedown = (e) => {
+    var type = e.target.getAttribute('data-type') // .parentNode
+    if (type === 'pathItem') {
+        var index = e.target.getAttribute('data-index')
+        state.saveIndex.old = parseInt(index)
+        var copyDiv = document.getElementById('temp-copy-object') // 宣告克隆物件內容
+        var location = e.target.getBoundingClientRect() // 讀取被觸發的物件
+        copyDiv.style.top = location.y + 'px'
+        copyDiv.style.left = location.x + 'px'
+        var cloneDiv = e.target.cloneNode(true)
+        copyDiv.appendChild(cloneDiv)
+        state.mousedownLocations.x = e.x
+        state.mousedownLocations.y = e.y
+        state.tempPathItemDivLocaltion.y = location.y
+        state.tempPathItemDivLocaltion.x = location.x
+        state.tempPathItemDiv = e.target
+    }
+
+}
+const mouseleave = (e) => {
+    const elementsWithClass = state.tempHoverDiv;
+    if (state.tempHoverDiv !== null) {
+        elementsWithClass.style.opacity = 0
+        elementsWithClass.style.pointerEvents = 'none'
+        state.tempHoverDiv = null
+    }
+    if (state.tempMoveFocusDiv.div !== null) {
+        state.tempMoveFocusDiv.div = null
+        if (state.tempMoveFocusDiv.down !== null) {
+            state.tempMoveFocusDiv.down.remove();
+            state.tempMoveFocusDiv.down = null
+        }
+        if (state.tempMoveFocusDiv.up !== null) {
+            state.tempMoveFocusDiv.up.remove();
+            state.tempMoveFocusDiv.up = null
+        }
+    }
+}
+
+// --------------------------
+const initWs5 = () => {
+    const openwebsocket05 = () => {
+        if ($webSocketconnect05().readyState === 1) {
+            state.ws5 = $webSocketconnect05()
+            if (state.wsListener5.close !== null) {
+                state.ws5.removeEventListener("close", state.wsListener5.close)
+                state.wsListener5.close = null
+            }
+            const colseEvent = () => {
+                setTimeout(() => {
+                    openwebsocket05()
+                }, 1000)
+            }
+            state.ws5.addEventListener("close", colseEvent)
+            state.wsListener5.close = colseEvent
+            // var tew = 0
+            const messageEvent = (event) => {
+                var data = JSON.parse(event.data)
+                state.wsRoiData1 = data
+                // console.log(data);
+            }
+            state.ws5.addEventListener("message", messageEvent)
+            // state.wsListener3.message = messageEvent
+        } else if ($webSocketconnect05().readyState !== 1) {
+            setTimeout(() => {
+                openwebsocket05()
+            }, 1000)
+        }
+    }
+    openwebsocket05()
+}
+onMounted(() => {
+    var arr = [{
+        name: '六號出口',
+        stoptime: 10,
+        alarm: false,
+    }]
+    for (var i = 0; i < 5; i++) {
+        arr.push({
+            name: '海域B-' + i,
+            stoptime: 8,
+            alarm: true,
+        })
+    }
+    state.pathList = arr
+
+    var arr01 = [];
+    for (var z = 0; z < 100; z++) {
+        arr01.push({
+            img: '/mock/ir13802.jpg',
+            name: '港口000'
+        })
+    }
+    state.cameraList = arr01
+    initWs5()
+})
+onBeforeUnmount(() => {
+    if (state.wsListener5.close !== null) {
+        state.ws5.removeEventListener("close", state.wsListener5.close)
+        state.wsListener5.close = null
+    }
+    if (state.wsListener5.message !== null) {
+        state.ws5.removeEventListener("message", state.wsListener5.message)
+        state.wsListener5.message = null
+    }
+    if (state.ws5 !== null) {
+        // state.ws.close()
+        state.ws5 = null
+    }
+})
+</script>
+<style scoped>
+.container-canvas {
+    display: grid;
+    grid-template-columns: 45% 27.5% 27.5%;
+    height: 100%;
+    /* background-color: #F2F2F2; */
+    /* border: #D3D5D4 1px solid; */
+}
+
+.item-canvas {
+    border-radius: 5px;
+    /* border: 1px #C5C5C7 solid; */
+    margin: .25em;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    box-shadow: 0px 0px 3px 1px #b7b7b7;
+}
+
+.item-card-top {
+    padding: .5em;
+    box-shadow: 0px 2px 2px 0px #b7b7b7;
+}
+
+.item-grid {
+    display: grid;
+    grid-template-rows: 60% 40%;
+    height: 100%;
+}
+
+.item-878787 {
+    color: #878787;
+}
+
+.item-AEBBC3 {
+    color: #AEBBC3;
+}
+
+.v-c-btn {
+    cursor: pointer;
+    transition: all .3s;
+}
+
+.v-c-btn:hover {
+    opacity: .7;
+}
+
+.v-c-btn:active {
+    opacity: .9;
+}
+
+.bg-f1f1f1ba {
+    background-color: #f1f1f1ba;
+}
+
+.item-card-content {
+    flex-grow: 1;
+
+    padding: .5em;
+}
+
+.item-hint-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.def-point-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 12% 64% 24%;
+    cursor: pointer;
+    /* background-color: #fff; */
+}
+
+.def-point-item {
+    background-color: #fff;
+    transition: .2s;
+    border: 2px #EAEAEA solid;
+}
+
+.def-point-item:hover {
+    background-color: #f5f5f5;
+}
+
+.def-point-id {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.def-point-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: #AEBBC3;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 1.5em;
+}
+
+.def-point-name {
+    color: #2B2D2C;
+    font-weight: 700;
+}
+
+.def-point-stoptime {
+    font-size: 14px;
+}
+
+.def-point-meun {
+    display: flex;
+    align-items: center;
+}
+
+.def-point-meun-btn {
+    width: 32px;
+    pointer-events: auto;
+    background-color: #ffffff00;
+    transition: .2s;
+    border-radius: 5px;
+}
+
+.def-point-meun-btn:hover {
+    background-color: #ececec;
+}
+
+.def-point-meun-btn:active {
+    background-color: #d3d3d3;
+}
+
+.cameraList-gird {
+    display: grid;
+    grid-template-columns: 25% 25% 25% 25%;
+    width: 100%;
+}
+
+.camera-canvas>img {
+    border-radius: 3px;
+    border: 2px #EAEAEA solid;
+}
+
+#temp-copy-object {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    pointer-events: none;
+    opacity: .8;
+}
+</style>
+
+<style>
+.path-add-message {
+    width: 100%;
+    position: relative;
+    /* height: 1px; */
+    /* background-color: #8297ff; */
+}
+
+.path-add-message>div {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #8297ff;
+}
+
+/* select style */
+/* .item-select .v-select.v-input--dense .v-select__selection--comma {
+    margin: 0px !important;
+}
+
+.item-select .v-text-field fieldset,
+.v-text-field .v-input__control {
+    height: 35px !important;
+}
+
+.item-select .v-text-field.v-text-field--enclosed:not(.v-text-field--rounded)>.v-input__control>.v-input__slot,
+.v-text-field.v-text-field--enclosed .v-text-field__details {
+    height: 35px !important;
+}
+
+.item-select .v-select__slot {
+    height: 32px !important;
+}
+
+.item-select .v-input__append-inner {
+    margin-top: 3px !important;
+}
+
+.item-select .v-input__slot {
+    padding: 0px 6px !important;
+}
+
+.leaflet-div-icon {
+    background: unset !important;
+    border: unset !important;
+} */
+
+.floatingDiv-111 {
+    position: fixed;
+    padding: 5px;
+    background: rgb(227 227 227);
+    font-size: 25px;
+    color: crimson;
+    animation: floatLeftRight 2s infinite;
+    box-shadow: 1px 1px 1px #b2b2b2;
+    border-radius: 9px;
+    width: fit-content;
+    transform: translateY(-50%);
+}
+
+@keyframes floatLeftRight {
+    0% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(3px);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.recorder-canvas {
+    position: fixed;
+    left: 10px;
+    bottom: 10px;
+    background-color: #fff;
+    border: 1px solid #000;
+}
+
+.vdisplay {
+    pointer-events: none;
+    color: #5e5e5e !important;
+    opacity: 0.4;
+}
+</style>

@@ -1,0 +1,1150 @@
+<template>
+    <v-card>
+        <v-card-text class="">
+            <v-row>
+                <v-col cols="12" class="d-flex justify-start" style="white-space: nowrap;">
+                    <div class="d-flex align-center pr-4">
+                        <div>相機名稱</div>
+                        <v-select width="130px" density="compact" variant="outlined" :items="camItems" item-title="name"
+                            item-value="name" hide-details v-model="camera_id" label="" single-line disabled>
+                        </v-select>
+                    </div>
+
+                    <div class="d-flex align-center pr-4">
+                        <div>巡弋點名稱</div>
+                        <v-select width="80px" density="compact" variant="outlined" :items="cruisingItems"
+                            item-title="name" item-value="name" hide-details v-model="cursingPoint_id" label=""
+                            single-line disabled>
+                        </v-select>
+                    </div>
+
+                    <div class="d-flex align-center pr-4">
+                        <div>查詢時間</div>
+                        <!-- <v-select density="compact" variant="outlined" :items="dateRangeItems" item-title="name"
+                            item-value="name" hide-details v-model="dateRangeSelected" label="" single-line disabled>
+                        </v-select> -->
+                        <v-text-field v-model="dateRangeSelected" density="compact" variant="outlined" hide-details
+                            type="text" id="datetimerange-input123" size="25" class="v-field__input"></v-text-field>
+                    </div>
+
+
+                    <div class="d-flex align-center pr-4">
+                        <div>巡弋時段</div>
+
+                        <!-- {{ timeRangeSelected }} -->
+                        <v-select width="400px" v-model="timeRangeSelected" :items="timeRangeItems" variant="outlined"
+                            density="compact" item-title="start_time" item-value="start_time" hide-details
+                            return-object>
+                            <template v-slot:selection="data">
+                                <!-- <v-chip :key="data.item.start_time" v-bind="data.attrs" :disabled="data.disabled"
+                                    :model-value="data.selected" size="small"
+                                    @click:close="data.parent.selectItem(data.item)">
+                                    {{ data.item.raw.start_time + ' - ' + data.item.raw.end_time }}
+                                </v-chip> -->
+                                <div :key="data.item.start_time" v-bind="data.attrs" :disabled="data.disabled"
+                                    :model-value="data.selected" size="small"
+                                    @click:close="data.parent.selectItem(data.item)">
+                                    {{ data.item.raw.start_time + ' - ' + data.item.raw.end_time }}
+                                </div>
+                            </template>
+
+                            <template v-slot:item="{ item, props }">
+                                <v-list-item v-bind="props" :title="item.raw.start_time + ' - ' + item.raw.end_time">
+                                    <!-- <template v-slot:prepend>
+                                        <v-checkbox-btn :model-value="props.selected"
+                                            @click="props.select(!props.selected)"></v-checkbox-btn>
+                                    </template> -->
+                                </v-list-item>
+                            </template>
+                        </v-select>
+
+
+
+                    </div>
+
+                    <v-btn @click="clearChart">清除</v-btn>
+                    <v-btn @click="showNewData">新Data</v-btn>
+                </v-col>
+
+                <v-col cols="12">
+                    <v-row no-gutters style="border: 5px solid #F2F2F0;border-radius:10px;">
+                        <v-col cols="6" class="pa-4">
+                            <h3>最高溫度</h3>
+                            <div ref="chartRef" style="width: 100%; height: 396px;"></div>
+                        </v-col>
+                        <v-col cols="6" class="pa-4">
+                            <v-row no-gutters>
+                                <v-col cols="12" class="pb-13">
+                                    <h3>最低溫度</h3>
+
+                                    <div ref="chartRef2" style="width: 100%; height: 160px;"></div>
+
+                                </v-col>
+                                <v-col cols="12">
+                                    <h3>平均溫度</h3>
+
+                                    <div ref="chartRef3" style="width: 100%; height: 160px;"></div>
+
+                                </v-col>
+                            </v-row>
+                        </v-col>
+                    </v-row>
+
+                </v-col>
+
+
+                <v-col cols="5">
+                    <v-row no-gutters style="border: 5px solid #F2F2F0;border-radius:10px;">
+                        <v-col cols="12" class="pa-4">
+                            <h3>熱像圖</h3>
+                        </v-col>
+
+                        <v-col cols="12">
+                            <div class="d-flex justify-space-evenly pb-4">
+
+                                <div class="" style="position: relative; width: 360px; height: 270ppx;">
+                                    <v-img :src="src" :aspect-ratio="4 / 3" cover></v-img>
+                                    <div :style="rectangleStyle" @mousedown="startDragging"></div>
+                                </div>
+                                <div class="" style="width: 360px; height: 270px; overflow: hidden;">
+                                    <v-img :src="src" :style="fixedMagnifiedImageStyle" :aspect-ratio="4 / 3"
+                                        cover></v-img>
+                                </div>
+                            </div>
+                        </v-col>
+                    </v-row>
+                </v-col>
+
+                <v-col cols="7">
+
+
+                    <v-row no-gutters style="border: 5px solid #F2F2F0;border-radius:10px;">
+                        <v-col cols="12" class="pa-4">
+                            <h3>高溫時段統計圖</h3>
+                        </v-col>
+
+                        <v-col cols="12" class="pb-4">
+                            <div ref="chartRef4" style="width: 100%; height: 270px;"></div>
+
+
+                        </v-col>
+
+                    </v-row>
+                </v-col>
+
+
+
+
+
+            </v-row>
+        </v-card-text>
+
+
+    </v-card>
+</template>
+
+<script setup>
+useHead({
+    // title: 'vanilla-datetimerange-picker simple example',
+    meta: [
+        { charset: 'UTF-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, shrink-to-fit=no' }
+    ],
+    link: [
+        {
+            rel: 'stylesheet',
+            type: 'text/css',
+            href: '/css/vanilla-datetimerange-picker-dark.css'
+        }
+    ],
+    script: [
+        {
+            src: '/js/moment.min.js',
+            type: 'text/javascript'
+        },
+        {
+            src: '/js/vanilla-datetimerange-picker.js',
+            type: 'text/javascript'
+        }
+    ],
+    style: [
+        { children: 'body { color: white; background-color: #fff; }' }
+    ]
+})
+
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import * as echarts from 'echarts';
+
+
+
+const src = 'https://cdn.vuetifyjs.com/images/parallax/material.jpg';
+
+const rectangle = reactive({
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 90,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+});
+
+const rectangleStyle = computed(() => ({
+    position: 'absolute',
+    left: `${rectangle.x}px`,
+    top: `${rectangle.y}px`,
+    width: `${rectangle.width}px`,
+    height: `${rectangle.height}px`,
+    border: '2px solid blue',
+    cursor: 'move',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+}));
+
+const fixedMagnifiedImageStyle = computed(() => ({
+    width: `360px`,
+    height: `270px`,
+    transform: `translate(-${rectangle.x * 3}px, -${rectangle.y * 3}px) scale(3)`,
+    transformOrigin: 'top left',
+}));
+
+const startDragging = (e) => {
+    rectangle.isDragging = true;
+    rectangle.startX = e.clientX - rectangle.x;
+    rectangle.startY = e.clientY - rectangle.y;
+
+    document.addEventListener('mousemove', onDragging);
+    document.addEventListener('mouseup', stopDragging);
+};
+
+const onDragging = (e) => {
+    if (!rectangle.isDragging) return;
+    rectangle.x = Math.min(Math.max(e.clientX - rectangle.startX, 0), 360 - rectangle.width);
+    rectangle.y = Math.min(Math.max(e.clientY - rectangle.startY, 0), 270 - rectangle.height);
+};
+
+const stopDragging = () => {
+    rectangle.isDragging = false;
+    document.removeEventListener('mousemove', onDragging);
+    document.removeEventListener('mouseup', stopDragging);
+};
+
+
+
+
+// select
+const camItems = ref([{ name: 'cam07' }]);
+const camera_id = ref('cam07');
+const cruisingItems = ref([{ name: 8 }]);
+const cursingPoint_id = ref(8);
+// const dateRangeItems = ref([{ name: '2024-08-30' }]);
+const dateRangeSelected = ref("");
+const timeRangeItems = ref([
+    { start_time: '2024-01-01 01:01:01', end_time: '2024-01-01 23:59:57' },
+    { start_time: '2024-01-01 01:01:02', end_time: '2024-01-01 23:59:58' },
+    { start_time: '2024-01-01 01:01:03', end_time: '2024-01-01 23:59:59' }
+]);
+const timeRangeSelected = ref({ start_time: '', end_time: '' });
+
+
+const chartRef = ref(null);
+const chartRef2 = ref(null);
+const chartRef3 = ref(null);
+const chartRef4 = ref(null);
+
+let chart = null;
+let chart2 = null;
+let chart3 = null;
+let chart4 = null;
+
+const ws5 = ref(null);
+const data_on = ref(false);
+
+const optionHighTemp = ref({
+    animation: false,
+    animationDurationUpdate: 0,
+    // title: {
+    //     text: "最高溫度",
+    //     top: '5%',
+
+    //     textStyle: { //主标题文本样式{"fontSize": 18,"fontWeight": "bolder","color": "#333"}
+    //         fontFamily: 'Arial',
+    //         fontSize: 16,
+    //         fontStyle: 'normal',
+    //         fontWeight: 'normal',
+    //     },
+    // },
+    dataZoom: [
+        {
+            type: "inside",
+            filterMode: 'filter',
+            show: true,
+            top: '12%',
+            height: 30,
+
+            // minValueSpan: 12,
+            // maxValueSpan: 12,
+            // labelFormatter: function (value) {
+            //     return value + ""
+            // }
+        }
+    ],        // realtime: false,
+    // zoomOnMouseWheel: 'shift'
+
+    tooltip: {
+        animation: false,
+        transitionDuration: 0,
+        show: true,
+        trigger: 'axis',
+        showContent: true,
+        showDelay: 0,
+        axisPointer: {
+            show: true,
+            animation: false
+        },
+        // formatter: function (value, index) {
+        //     return Math.round(value) + "";
+        // },
+    },
+    legend: {
+        // left: 80,
+        top: '0%',
+        type: 'scroll',
+    },
+    grid: {
+        top: '7.5%',
+        left: '3%',
+        right: '6%',
+        bottom: '5%',
+        // containLabel: true
+    },
+    xAxis: {
+        name: "(時間)",
+        type: 'time',
+        boundaryGap: false,
+        axisLabel: {
+            showMaxLabel: true,
+        }
+    },
+    yAxis: {
+        name: "(°C)",
+        type: 'value',
+        scale: true,
+        axisLabel: {
+            showMaxLabel: false
+        }
+    },
+    series: []
+});
+
+
+
+const option = ref({
+    animation: false,
+    animationDurationUpdate: 0,
+    // title: {
+    //     text: "最高溫度",
+    //     top: '5%',
+
+    //     textStyle: { //主标题文本样式{"fontSize": 18,"fontWeight": "bolder","color": "#333"}
+    //         fontFamily: 'Arial',
+    //         fontSize: 16,
+    //         fontStyle: 'normal',
+    //         fontWeight: 'normal',
+    //     },
+    // },
+    dataZoom: [
+        {
+            type: "inside",
+            filterMode: 'filter',
+            show: true,
+            top: '12%',
+            height: 30,
+
+            // minValueSpan: 12,
+            // maxValueSpan: 12,
+            // labelFormatter: function (value) {
+            //     return value + ""
+            // }
+        }
+    ],        // realtime: false,
+    // zoomOnMouseWheel: 'shift'
+
+    tooltip: {
+        animation: false,
+        transitionDuration: 0,
+        show: true,
+        trigger: 'axis',
+        showContent: true,
+        showDelay: 0,
+        axisPointer: {
+            show: true,
+            animation: false
+        },
+        // formatter: function (value, index) {
+        //     return Math.round(value) + "";
+        // },
+    },
+    legend: {
+        // left: 80,
+        top: '0%',
+        type: 'scroll',
+    },
+    grid: {
+        top: '18%',
+        left: '3%',
+        right: '6%',
+        bottom: '12.5%',
+        // containLabel: true
+    },
+    xAxis: {
+        name: "(時間)",
+        type: 'time',
+        boundaryGap: false,
+        axisLabel: {
+            showMaxLabel: true,
+        }
+    },
+    yAxis: {
+        name: "(°C)",
+        type: 'value',
+        scale: true,
+        axisLabel: {
+            showMaxLabel: false
+        }
+    },
+    series: []
+});
+
+
+const optionBar = ref({
+    animation: false,
+    animationDurationUpdate: 0,
+    // title: {
+    //     text: "最高溫度",
+    //     top: '5%',
+
+    //     textStyle: { //主标题文本样式{"fontSize": 18,"fontWeight": "bolder","color": "#333"}
+    //         fontFamily: 'Arial',
+    //         fontSize: 16,
+    //         fontStyle: 'normal',
+    //         fontWeight: 'normal',
+    //     },
+    // },
+    dataZoom: [
+        {
+            type: "inside",
+            filterMode: 'filter',
+            show: true,
+            top: '12%',
+            height: 30,
+
+            // minValueSpan: 12,
+            // maxValueSpan: 12,
+            // labelFormatter: function (value) {
+            //     return value + ""
+            // }
+        }
+    ],        // realtime: false,
+    // zoomOnMouseWheel: 'shift'
+
+    tooltip: {
+        animation: false,
+        transitionDuration: 0,
+        show: true,
+        trigger: 'axis',
+        showContent: true,
+        showDelay: 0,
+        axisPointer: {
+            show: true,
+            animation: false
+        },
+        // formatter: function (value, index) {
+        //     return Math.round(value) + "";
+        // },
+    },
+    legend: {
+        // left: 80,
+        top: '0%',
+        type: 'scroll',
+    },
+    grid: {
+        top: '15%',
+        left: '3%',
+        right: '6%',
+        bottom: '8%',
+        // containLabel: true
+    },
+    xAxis: {
+        name: "(小時)",
+        type: 'category',
+        boundaryGap: true,
+        axisLabel: {
+            showMaxLabel: true,
+        }
+    },
+    yAxis: {
+        name: "(次數)",
+        type: 'value',
+        scale: true,
+        axisLabel: {
+            showMaxLabel: false
+        }
+    },
+    series: []
+});
+
+
+const echart = ref({
+    echart_roiMax: {
+        echart_data: [
+            {
+                "roi_id": 1,
+                "roi_number": 2,
+                "roi_name": 5,
+                "data": [
+                    ["2023-06-17 15:20:00", 24.5], ["2023-06-17 15:20:01", 41.9], ["2023-06-17 15:20:02", 42.1], ["2023-06-17 15:20:03", 46.5], ["2023-06-17 15:20:04", 35.7],
+                    ["2023-06-17 15:20:05", 48.3], ["2023-06-17 15:20:06", 36.2], ["2023-06-17 15:20:07", 32.5], ["2023-06-17 15:20:08", 28.8], ["2023-06-17 15:20:09", 22.2]
+                ]
+            }
+        ], markarea: {}
+    },
+    echart_roiMin: {
+        echart_data: [
+            {
+                "roi_id": 1,
+                "roi_number": 2,
+                "roi_name": 5,
+                "data": [
+                    ["2023-06-17 15:20:00", 24.5], ["2023-06-17 15:20:01", 41.9], ["2023-06-17 15:20:02", 42.1], ["2023-06-17 15:20:03", 46.5], ["2023-06-17 15:20:04", 35.7],
+                    ["2023-06-17 15:20:05", 48.3], ["2023-06-17 15:20:06", 36.2], ["2023-06-17 15:20:07", 32.5], ["2023-06-17 15:20:08", 28.8], ["2023-06-17 15:20:09", 22.2]
+                ]
+            }
+        ], markarea: {}
+    },
+    echart_roiAvg: {
+        echart_data: [
+            {
+                "roi_id": 1,
+                "roi_number": 2,
+                "roi_name": 5,
+                "data": [
+                    ["2023-06-17 15:20:00", 24.5], ["2023-06-17 15:20:01", 41.9], ["2023-06-17 15:20:02", 42.1], ["2023-06-17 15:20:03", 46.5], ["2023-06-17 15:20:04", 35.7],
+                    ["2023-06-17 15:20:05", 48.3], ["2023-06-17 15:20:06", 36.2], ["2023-06-17 15:20:07", 32.5], ["2023-06-17 15:20:08", 28.8], ["2023-06-17 15:20:09", 22.2]
+                ]
+            }
+        ], markarea: {}
+    },
+    table_peakHour: {
+        echart_data: [
+            {
+                "roi_id": 1,
+                "roi_number": 2,
+                "roi_name": 5,
+                "data": [
+                    [0, 24.5], [1, 41.9], [2, 42.1], [3, 46.5], [4, 35.7],
+                    [5, 48.3], [6, 36.2], [7, 32.5], [8, 28.8], [9, 22.2], [10, 24.5], [11, 41.9], [12, 42.1], [13, 46.5], [14, 35.7],
+                    [15, 48.3], [16, 36.2], [17, 32.5], [18, 28.8], [19, 22.2], [20, 32.5], [21, 28.8], [22, 22.2], [23, 22.2]
+                ]
+            }
+        ], markarea: {}
+    },
+    roiTemperature_image_URL: {}
+})
+
+
+
+// Simulated WebSocket data
+const mockWebSocketData = [
+    {
+        "roi_id": 1,
+        "roi_number": 1,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 24], ["2023-06-17 15:20:01", 41], ["2023-06-17 15:20:02", 42], ["2023-06-17 15:20:03", 46], ["2023-06-17 15:20:04", 35],
+            ["2023-06-17 15:20:05", 48], ["2023-06-17 15:20:06", 36], ["2023-06-17 15:20:07", 32], ["2023-06-17 15:20:08", 28], ["2023-06-17 15:20:09", 22]
+        ]
+    },
+    {
+        "roi_id": 2,
+        "roi_number": 2,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 55], ["2023-06-17 15:20:01", 17], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 46], ["2023-06-17 15:20:04", 16],
+            ["2023-06-17 15:20:05", 76], ["2023-06-17 15:20:06", 78], ["2023-06-17 15:20:07", 97], ["2023-06-17 15:20:08", 28], ["2023-06-17 15:20:09", 75]
+        ]
+    },
+    {
+        "roi_id": 3,
+        "roi_number": 3,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 4,
+        "roi_number": 4,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 5,
+        "roi_number": 5,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 6,
+        "roi_number": 6,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 7,
+        "roi_number": 7,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 8,
+        "roi_number": 8,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 9,
+        "roi_number": 9,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 10,
+        "roi_number": 10,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 11,
+        "roi_number": 11,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 12,
+        "roi_number": 12,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 13,
+        "roi_number": 13,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 14,
+        "roi_number": 14,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 15,
+        "roi_number": 15,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 16,
+        "roi_number": 16,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 17,
+        "roi_number": 17,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 18,
+        "roi_number": 18,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 19,
+        "roi_number": 19,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 20,
+        "roi_number": 20,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 21,
+        "roi_number": 21,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 22,
+        "roi_number": 22,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 23,
+        "roi_number": 23,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 24,
+        "roi_number": 24,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+    {
+        "roi_id": 25,
+        "roi_number": 25,
+        "roi_type": 5,
+        "data": [
+            ["2023-06-17 15:20:00", 15], ["2023-06-17 15:20:01", 71], ["2023-06-17 15:20:02", 33], ["2023-06-17 15:20:03", 86], ["2023-06-17 15:20:04", 38],
+            ["2023-06-17 15:20:05", 32], ["2023-06-17 15:20:06", 26], ["2023-06-17 15:20:07", 17], ["2023-06-17 15:20:08", 68], ["2023-06-17 15:20:09", 15]
+        ]
+    },
+
+
+];
+const convertISOToCustomFormat = (isoString) => {
+    const date = new Date(isoString);
+
+    // 提取年、月、日、小时、分钟和秒
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以需要加1
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+
+    // 格式化为 'YYYY-MM-DD HH:MM:SS'
+    return `${year}-${month}-${day}`;
+}
+
+
+
+
+
+
+
+
+
+const datePlugin = () => {
+    let drp = new DateRangePicker('datetimerange-input123', {
+        timePicker: false,
+        alwaysShowCalendars: true,
+        // ranges: {
+        // 'Today': [moment().startOf('day'), moment().endOf('day')],
+        // 'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+        // 'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
+        // 'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
+        // },
+        locale: {
+            format: "YYYY-MM-DD",
+        }
+    }, function (start, end) {
+        console.log("ertergreg", convertISOToCustomFormat(start.format()));
+        console.log("ertergreg", convertISOToCustomFormat(end.format()));
+
+        dateRangeSelected.value = convertISOToCustomFormat(start.format()).toString() + " " + "-" + " " + convertISOToCustomFormat(end.format()).toString()
+
+        clearChart()
+        timeRangeSelected.value = { start_time: '', end_time: '' }
+        getHistoryCruising(convertISOToCustomFormat(start.format()), convertISOToCustomFormat(end.format()))
+
+        // alert(start.format() + " - " + end.format());
+    });
+
+    window.addEventListener('apply.daterangepicker', function (ev) {
+        console.log(ev.detail.startDate.format('YYYY-MM-DD'));
+        console.log(ev.detail.endDate.format('YYYY-MM-DD'));
+    });
+}
+
+// Function to update chart data
+const updateChartData_roiMax = (data) => {
+    optionHighTemp.value.series = data.map(item => ({
+        name: item.roi_number,
+        type: 'line',
+        data: item.data,
+        animation: false,
+        symbol: 'none',
+        showSymbol: false,
+        hoverAnimation: false,
+        smooth: false,
+        emphasis: {
+            disabled: true
+        },
+        // color: "black",
+        // sampling: "lttb",
+        lineStyle: {
+            width: 0.5
+        }
+    }));
+
+    if (chart) {
+        chart.setOption(optionHighTemp.value, true);
+    }
+};
+
+
+const updateChartData_roiMin = (data) => {
+    option.value.series = data.map(item => ({
+        name: item.roi_number,
+        type: 'line',
+        data: item.data,
+        animation: false,
+        symbol: 'none',
+        showSymbol: false,
+        hoverAnimation: false,
+        smooth: false,
+        emphasis: {
+            disabled: true
+        },
+        // color: "black",
+        // sampling: "lttb",
+        lineStyle: {
+            width: 0.5
+        }
+    }));
+
+    if (chart2) {
+        chart2.setOption(option.value, true);
+    }
+};
+
+const updateChartData_roiAvg = (data) => {
+    option.value.series = data.map(item => ({
+        name: item.roi_number,
+        type: 'line',
+        data: item.data,
+        animation: false,
+        symbol: 'none',
+        showSymbol: false,
+        hoverAnimation: false,
+        smooth: false,
+        emphasis: {
+            disabled: true
+        },
+        // color: "black",
+        // sampling: "lttb",
+        lineStyle: {
+            width: 0.5
+        }
+    }));
+
+
+    if (chart3) {
+        chart3.setOption(option.value, true);
+    }
+
+};
+
+
+const updateChartData_peakHour = (data) => {
+    optionBar.value.series = data.map(item => ({
+        name: item.roi_number,
+        type: 'bar',
+        stack: 'total',
+        data: item.data,
+        animation: false,
+        symbol: 'none',
+        showSymbol: false,
+        hoverAnimation: false,
+        smooth: false,
+        emphasis: {
+            disabled: true
+        },
+        // color: "black",
+        // sampling: "lttb",
+        lineStyle: {
+            width: 0.5
+        }
+    }));
+
+
+    if (chart4) {
+        chart4.setOption(optionBar.value, true);
+    }
+};
+
+
+// Simulate WebSocket connection
+let websocketInterval;
+
+const simulateWebSocket = () => {
+    ws5.value = new WebSocket("ws://localhost:9001");
+
+    ws5.value.onopen = () => {
+        console.log("WebSocket connected");
+        // requestInitialData();
+    };
+
+    ws5.value.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log("dfgdfrder", data);
+
+        if (data.feature === "history_cursing" && data.method === "query_cursingEvent") {
+            //! timeRangeItems.value = data.content
+        }
+
+        if (data.feature === "history_temperature" && data.method === "query_roiTemperature") {
+            showNewData(
+                data.content.echart_roiMax.echart_data,
+                data.content.echart_roiMin.echart_data,
+                data.content.echart_roiAvg.echart_data,
+                data.content.table_peakHour.echart_data
+            )
+
+
+            //! timeRangeItems.value = data.content
+        }
+
+
+        if (data_on.value === false) {
+            // updateChartData_roiMax(data.echart_data);
+            updateChartData_roiMax(mockWebSocketData);
+            updateChartData_roiMin(mockWebSocketData);
+            updateChartData_roiAvg(mockWebSocketData);
+            updateChartData_peakHour(mockWebSocketData);
+
+            console.log("ggg", data.echart_data);
+            data_on.value = true
+        }
+    };
+
+    ws5.value.onerror = (error) => {
+        console.error("WebSocket error:", error);
+    };
+
+    ws5.value.onclose = () => {
+        console.log("WebSocket disconnected");
+        setTimeout(initWebSocket, 5000); // 重連機制
+    };
+}
+
+
+function requestInitialData() {
+
+    if (ws5.value && ws5.value.readyState === WebSocket.OPEN) {
+        ws5.value.send(JSON.stringify({
+            "feature": "request_initial_data",
+            "session": "sckji8452s"
+        }));
+    }
+}
+
+
+const getHistoryCruising = (e, e2) => {
+
+    if (ws5.value && ws5.value.readyState === WebSocket.OPEN) {
+
+
+        console.log("kkkkkkk", JSON.stringify({
+            "feature": "history_cursing",
+            "method": "query_cursingEvent",
+            "content": {
+                "camera_id": camera_id.value,
+                "cursingPoint_id": cursingPoint_id.value,
+                "selected_time": e,
+                "end_time": e2
+            },
+            "session": "sckji8452s",
+        }));
+
+        ws5.value.send(JSON.stringify({
+            "feature": "history_cursing",
+            "method": "query_cursingEvent",
+            "content": {
+                "camera_id": camera_id.value,
+                "cursingPoint_id": cursingPoint_id.value,
+                "selected_time": e,
+                "end_time": e2
+            },
+            "session": "sckji8452s",
+        }));
+    }
+
+}
+
+
+const getHistoryTempChart = () => {
+
+    if (ws5.value && ws5.value.readyState === WebSocket.OPEN) {
+
+        console.log("kkkkkkkdedddddd", JSON.stringify({
+            "feature": "history_temperature",
+            "method": "query_roiTemperature",
+            "content": {
+                "camera_id": camera_id.value,
+                "cursingPoint_id": cursingPoint_id.value,
+                "selected_time": [timeRangeSelected.value],
+            },
+            "session": "sckji8452s",
+        }));
+
+        ws5.value.send(JSON.stringify({
+            "feature": "history_temperature",
+            "method": "query_roiTemperature",
+            "content": {
+                "camera_id": camera_id.value,
+                "cursingPoint_id": cursingPoint_id.value,
+                "selected_time": [timeRangeSelected.value],
+            },
+            "session": "sckji8452s",
+        }));
+    }
+
+}
+
+
+
+const clearChart = () => {
+    updateChartData_roiMax([]);
+    updateChartData_roiMin([]);
+    updateChartData_roiAvg([]);
+    updateChartData_peakHour([]);
+
+
+};
+
+// 显示新数据
+const showNewData = (e, e2, e3, e4) => {
+    updateChartData_roiMax(echart.value.echart_roiMax.echart_data);
+    updateChartData_roiMin(echart.value.echart_roiMin.echart_data);
+    updateChartData_roiAvg(echart.value.echart_roiAvg.echart_data);
+    updateChartData_peakHour(echart.value.table_peakHour.echart_data);
+};
+
+
+
+watch(timeRangeSelected, (newValue) => {
+    getHistoryTempChart()
+
+});
+
+onMounted(() => {
+
+
+    datePlugin()
+
+
+
+    if (chartRef.value) {
+        chart = echarts.init(chartRef.value);
+        chart.setOption(optionHighTemp.value);
+    }
+
+
+    if (chartRef2.value) {
+        chart2 = echarts.init(chartRef2.value);
+        chart2.setOption(option.value);
+    }
+    if (chartRef3.value) {
+        chart3 = echarts.init(chartRef3.value);
+        chart3.setOption(option.value);
+    }
+    if (chartRef4.value) {
+        chart4 = echarts.init(chartRef4.value);
+        chart4.setOption(optionBar.value);
+    }
+
+
+    simulateWebSocket();
+});
+
+onUnmounted(() => {
+    if (chart) {
+        chart.dispose();
+    }
+    if (chart2) {
+        chart2.dispose();
+    }
+    if (chart3) {
+        chart3.dispose();
+    }
+    if (chart4) {
+        chart4.dispose();
+    }
+    if (websocketInterval) {
+        clearInterval(websocketInterval);
+    }
+});
+</script>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ThermalFS 自檢復原</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #eef3f7;
+        --card: #ffffff;
+        --accent: #0f3b46;
+        --accent-soft: #dcebf0;
+        --danger: #b43f3f;
+        --text: #182026;
+        --muted: #66727d;
+        --border: #d7e0e7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: auto;
+        overflow: hidden;
+      }
+
+      body {
+        font-family: "Segoe UI", "Microsoft JhengHei UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(15, 59, 70, 0.08), transparent 40%),
+          linear-gradient(180deg, #f7fafc, var(--bg));
+        color: var(--text);
+      }
+
+      .shell {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding: 12px;
+      }
+
+      .panel {
+        width: min(100%, 430px);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(15, 59, 70, 0.12);
+        overflow: hidden;
+      }
+
+      .header {
+        padding: 16px 18px 12px;
+        background: linear-gradient(135deg, rgba(15, 59, 70, 0.08), rgba(15, 59, 70, 0.02));
+        border-bottom: 1px solid var(--border);
+      }
+
+      .title {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .content {
+        padding: 14px 18px 16px;
+      }
+
+      .reason {
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        margin-bottom: 12px;
+      }
+
+      .reason-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .reason-code {
+        margin: 6px 0 0;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+
+      .countdown {
+        margin: 0 0 12px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .details {
+        margin: 0 0 14px;
+        padding: 10px 12px;
+        min-height: 64px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #fbfdff;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        line-height: 1.5;
+        overflow: hidden;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        min-height: 44px;
+        padding: 10px 8px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .primary {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 10px 20px rgba(15, 59, 70, 0.18);
+      }
+
+      .secondary {
+        background: #edf4f7;
+        color: var(--accent);
+      }
+
+      .danger {
+        background: var(--danger);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="panel">
+        <div class="header">
+          <h1 class="title" id="title">ThermalFS 自檢復原視窗</h1>
+          <p class="subtitle">主畫面或內建服務發生異常時，系統會先停留在這裡，等待倒數後自動重新開啟。</p>
+        </div>
+        <div class="content">
+          <div class="reason">
+            <p class="reason-title" id="reasonLabel">未知異常</p>
+            <p class="reason-code" id="reasonCode">reason: unknown</p>
+          </div>
+          <p class="countdown" id="countdownLabel">10 秒後自動重新開啟主畫面</p>
+          <pre class="details" id="detailsText">目前沒有額外錯誤細節。</pre>
+          <div class="actions">
+            <button class="secondary" id="pauseButton">暫停倒數</button>
+            <button class="primary" id="startNowButton">立即重新開啟</button>
+            <button class="danger" id="quitButton">結束程式</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const titleEl = document.getElementById('title');
+      const reasonLabelEl = document.getElementById('reasonLabel');
+      const reasonCodeEl = document.getElementById('reasonCode');
+      const countdownLabelEl = document.getElementById('countdownLabel');
+      const detailsTextEl = document.getElementById('detailsText');
+      const pauseButton = document.getElementById('pauseButton');
+      const startNowButton = document.getElementById('startNowButton');
+      const quitButton = document.getElementById('quitButton');
+
+      function renderState(state) {
+        titleEl.textContent = state.title;
+        reasonLabelEl.textContent = state.reasonLabel;
+        reasonCodeEl.textContent = `reason: ${state.reasonCode}`;
+        countdownLabelEl.textContent = state.countdownLabel;
+        detailsTextEl.textContent = state.detailsText;
+        pauseButton.textContent = state.isPaused ? '繼續倒數' : '暫停倒數';
+      }
+
+      pauseButton.addEventListener('click', () => {
+        window.recoveryAPI.togglePause();
+      });
+
+      startNowButton.addEventListener('click', () => {
+        window.recoveryAPI.startNow();
+      });
+
+      quitButton.addEventListener('click', () => {
+        window.recoveryAPI.quitApp();
+      });
+
+      window.recoveryAPI.onState(renderState);
+      window.recoveryAPI.requestState().then(renderState);
+    </script>
+  </body>
+</html>

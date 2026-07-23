@@ -1,0 +1,4275 @@
+<template>
+    <div class="item-card-content" id="map-top-b" style="height: 100%; width: 100%;z-index: 0;">
+        <LMap ref="LMmap" :min-zoom="state.minZoom" :crs="state.crs" style="height: 100%; width: 100%"
+            :options="state.mapOptions" @ready="runIndex.index++">
+        </LMap>
+        <!-- <div class="test-show-rotate">{{ JSON.stringify(state.rotat, null, 2) }}</div> -->
+        <!-- <div class="groupwindow-open-canvas" id="groupwindowObject" style="display: none;">
+            <div class="groupwindow-open-icon" id="groupwindowObject-icon" style="width:60px;">
+                <NuxtImg src="/images/fs/Group 638755fs-tools-icon.svg" style="width:60px;margin-top: 5px;" />
+            </div>
+            <div class="group-content">
+                <div class="pa-2" :class="state.maskAddMode === 'add' ? 'group-content-foucs' : ''"
+                    @click="state.maskAddMode = 'add'">
+                    <NuxtImg src="/images/fs/muen-bar-icon/增加 區域.svg" width="28" />
+                </div>
+                <div class="pa-2 group-divider-right"
+                    :class="state.maskAddMode === 'remove' ? 'group-content-foucs' : ''"
+                    @click="state.maskAddMode = 'remove'">
+                    <NuxtImg src="/images/fs/muen-bar-icon/減去 區域.svg" width="28" />
+                </div>
+                <div style="width:45px;" @click="requestBtnGroupEvent('mask-scope')">
+                    <NuxtImg src="/images/fs/muen-bar-icon/irregular.svg" width="45" />
+                </div>
+                <div style="width:45px;" @click="requestBtnGroupEvent('mask-polygon')">
+                    <NuxtImg src="/images/fs/muen-bar-icon/irregular-blob.svg" width="45" />
+                </div>
+                <div class="group-divider-right" style="width:45px;" @click="requestBtnGroupEvent('mask-blob')">
+                    <NuxtImg src="/images/fs/muen-bar-icon/irregular-ploy.svg" width="45" />
+                </div>
+                <div style="width:45px;">
+                    <NuxtImg src="/images/fs/muen-bar-icon/image.svg" width="45" />
+                </div>
+                <div style="width:45px;">
+                    <NuxtImg src="/images/fs/muen-bar-icon/pattern.svg" width="45" />
+                </div>
+                <div style="width:45px;">
+                    <NuxtImg src="/images/fs/muen-bar-icon/polygon.svg" width="45" />
+                </div>
+                <div style="width:45px;">
+                    <NuxtImg src="/images/fs/muen-bar-icon/irregular-blob.svg" width="45" />
+                </div>
+                <div style="width:45px;">
+                    <NuxtImg src="/images/fs/muen-bar-icon/scale to fit.svg" width="45" />
+                </div>
+            </div>
+        </div> -->
+        <!-- 重新命名/刪除對話框 -->
+        <v-dialog v-model="state.inputRoiNameWindow" width="auto">
+            <v-card max-width="400" prepend-icon="mdi-update" title="新增ROI項目">
+                <template v-slot:text>
+                    <v-sheet class="mx-auto" width="300">
+                        <v-form @submit.prevent>
+                            <v-text-field v-model="state.reNameValue" :rules="state.rules"
+                                label="ROI項目名稱"></v-text-field>
+                        </v-form>
+                    </v-sheet>
+                </template>
+                <template v-slot:actions>
+                    <v-btn text="取消" @click="inputRoiName('delete')"></v-btn>
+                    <v-btn text="送出" @click="inputRoiName('save')" :disabled="state.reNameValue === ''"></v-btn>
+                </template>
+            </v-card>
+        </v-dialog>
+        <div id="message" style="display: none;">
+        </div>
+    </div>
+</template>
+<script setup>
+import { ref } from 'vue'
+import L from 'leaflet'
+
+const { $webSocketconnect03 } = useNuxtApp()
+const { $displayRoi } = useNuxtApp()
+const LMmap = ref(null)
+var map = null
+const runIndex = reactive({
+    index: 0
+})
+useHead({
+    script: [{
+        src: '/js/Leaflet.markercluster-1.4.1/dist/leaflet.markercluster.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    {
+        src: '/js/Leaflet.markercluster-1.4.1/dist/leaflet.geometryutil.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    {
+        src: '/js/turf.min.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    // { src: '/js/L.PixiOverlay.js' }, // 目前沒有用到pixijs
+    {
+        src: '/js/crypto-js.min.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    {
+        src: '/js/leaflet.rotatedMarker.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    {
+        src: '/js/Leaflet.ImageOverlay.Rotated.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    },
+    {
+        src: '/js/Leaflet.GeotagPhoto.min.js',
+        async: true,
+        defer: true,
+        onload: () => {
+            runIndex.index++
+        }
+    }]
+});
+const state = reactive({
+    refreshMapTimeout: null,
+    inputRoiNameWindow: false,
+    reNameValue: '',
+    tempROIdata: {},
+    rules: [
+        value => {
+            if (value) return true
+
+            return '項目名稱不能為空'
+        },
+    ],
+    rotat:
+    {
+        rotated: 0
+    },
+    // contextmenu: false,
+    // MenuX: 0,
+    // MenuY: 0,
+    keyctrl: false,
+    templatePointInt: null,
+    workerTurf: null, // 計算TURF
+    globalMouseMoved: {
+        x: 0,
+        y: 0
+    },
+    tempMouseLocation: {
+        x: 0,
+        y: 0
+    },
+    ws3: {
+        readyState: 0
+    },
+    wsListener3: {
+        close: null,
+        message: null
+    },
+    recoderTime: 0,
+    rtcPeerConnectionItems: [],
+    rtcVIDEOLIST: [],
+    rtcVIDETYPEIndex: 0,
+    rtcVIDETYPE: 'vis',
+    imgWidth: 640,
+    imgHeight: -480,
+    dragObjectStatus: true,
+    // map
+    minZoom: -3,
+    maxZoom: 20,
+    crs: L.CRS.Simple,
+    mapOptions: {
+        dragging: true,
+        zoomSnap: 0.05,
+        zoomDelta: 0.05,
+        zoomAnimation: false,
+        wheelDebounceTime: 40,
+        wheelPxPerZoomLevel: 200,
+        doubleClickZoom: false,
+        zoomControl: false,
+        attributionControl: false,
+        // scrollWheelZoom: useAttrs().scrollWheelZoom
+    },
+    // map end
+    tempHoverDiv: null,
+    // 紀錄滑鼠位置
+    mousedownLocations: { // 暫存滑鼠點擊第一位置
+        x: 0,
+        y: 0
+    },
+    tempPathItemDiv: null,
+    tempPathItemDivLocaltion: {
+        x: 0,
+        y: 0
+    },
+    tempMoveFocusDiv: {
+        div: null,
+        up: null,
+        down: null
+    },
+    saveIndex: {
+        old: 0,
+        new: 0
+    },
+    speed: 0,
+    // ROI區域
+    pixiWebWorker: null, // 處理blob 路徑的webworker
+    pixireference: [],
+    reference: [],
+    pixispot: [],
+    pixiline: [],
+    pixiscope: [],
+    revisionObject: [],
+    revisionObjectleave: false,
+    tempMouseDownScopelatlng: {},
+    pixiblob: [],
+    pixiJsRoiBlobData: [],
+    pixiMask: [],
+    pixiJsRoiMaskData: [],
+    intiRevisionScopeData: null,
+    mousesaveLocation: { x: 0, y: 0 },
+    tempScopePosition: {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
+    },
+    saveFouceTempRevision: null, // 暫存revisionTransformerMove 函數，做刪除監聽用
+    dragTargettemp: { x: 0, y: 0 },
+    blobStatusAdd: false,
+    spotStatusAdd: false,
+    lineStatusAdd: false,
+    scopeStatusAdd: false,
+    lineTempAddObject: null,
+    lineTempAddLocation: [],
+    scopeTempAddObject: null,
+    scopeTempAddLocation: [],
+    moveRemovePoint: false,
+    AddTempPoints: [],
+    removePoint: null,
+    blobAddTempObject: null,
+    blobPutTempPoint: [],
+    blobChangeTempObject: null,
+    objectMask: null,
+    reqAnim: null,
+    changeModeStatus: false,
+    addPoint: null,
+    testLine: null,
+    maskAddMode: 'add', // add or remove
+    focusObjectList: {
+        spot: [],
+        line: [],
+        scope: [],
+        blob: []
+    },
+    tempMouseDownScopelnglat: null,
+    ptz: [],
+    cursingPoint_id: [],
+    randomID: Math.random().toString(36).substr(2)
+})
+const props = useAttrs().formtData
+const camID = useAttrs().camID
+const camType = useAttrs().camType
+const usePhoto = useAttrs().usePhoto
+watch(
+    () => props.wsRoiData,
+    (e, prevData) => {
+        if (!usePhoto) {
+            var data = {
+                spot: [],
+                line: [],
+                scope: [],
+                blob: [],
+                polygon: [],
+                mask: [],
+            }
+            e.forEach((y) => {
+                if (y.cam_id === camID) {
+                    if (y?.image_info) {
+                        y.image_info.forEach((ar) => {
+                            ar.roi_info.forEach((item) => {
+                                if (data[item.roi_type] !== undefined) {
+                                    if (item.roi_type === 'scope') {
+                                        data.scope.push({
+                                            "number": item.roi_id,
+                                            "temperature_max": item.roi_maxTemperature,
+                                            "temperature_min": 0,
+                                            "temperature_point": {
+                                                "median": {
+                                                    "start": item.thermometer_info.level1,
+                                                    "end": item.thermometer_info.level2
+                                                },
+                                                "temperature_ranger": {
+                                                    "max": item.thermometer_info.max,
+                                                    "min": item.thermometer_info.min
+                                                }
+                                            },
+                                            "position_point_A": {
+                                                "x": item.roi_nodeManual[0],
+                                                "y": item.roi_nodeManual[1]
+                                            },
+                                            "position_point_B": {
+                                                "x": item.roi_nodeManual[2],
+                                                "y": item.roi_nodeManual[3]
+                                            },
+                                            "alarm_status": item.roi_alarmSwitch,
+                                            "threshold": item.roi_thresholdManual,
+                                            "approval": item.autoROI_approval,
+                                            "temperature_avg": 46.3
+                                        })
+                                    } else if (item.roi_type === 'spot') {
+                                        data.spot.push({
+                                            "number": item.roi_id,
+                                            "temperature_max": item.roi_maxTemperature,
+                                            "temperature_min": 0,
+                                            "temperature_point": {
+                                                "median": {
+                                                    "start": item.thermometer_info.level1,
+                                                    "end": item.thermometer_info.level2
+                                                },
+                                                "temperature_ranger": {
+                                                    "max": item.thermometer_info.max,
+                                                    "min": item.thermometer_info.min
+                                                }
+                                            },
+                                            "position": {
+                                                "x": item.roi_nodeManual[0],
+                                                "y": item.roi_nodeManual[1]
+                                            },
+                                            "alarm_status": item.roi_alarmSwitch,
+                                            "threshold": item.roi_thresholdManual,
+                                            "approval": item.autoROI_approval,
+                                            "temperature_avg": 46.3
+                                        })
+                                    } else if (item.roi_type === 'line') {
+                                        data.line.push({
+                                            "number": item.roi_id,
+                                            "temperature_max": item.roi_maxTemperature,
+                                            "temperature_min": 0,
+                                            "temperature_point": {
+                                                "median": {
+                                                    "start": item.thermometer_info.level1,
+                                                    "end": item.thermometer_info.level2
+                                                },
+                                                "temperature_ranger": {
+                                                    "max": item.thermometer_info.max,
+                                                    "min": item.thermometer_info.min
+                                                }
+                                            },
+                                            "position_point_A": {
+                                                "x": item.roi_nodeManual[0],
+                                                "y": item.roi_nodeManual[1]
+                                            },
+                                            "position_point_B": {
+                                                "x": item.roi_nodeManual[2],
+                                                "y": item.roi_nodeManual[3]
+                                            },
+                                            "alarm_status": item.roi_alarmSwitch,
+                                            "threshold": item.roi_thresholdManual,
+                                            "approval": item.autoROI_approval,
+                                            "temperature_avg": 46.3
+                                        })
+                                    } else if (item.roi_type === 'blob') {
+                                        item.roi_nodeManual.forEach((blobs, index) => {
+                                            var roiAlarmStatus = 0 // 0 = normal ; 1 = level 1 ; 2 = level 2 ; 3 = auto
+                                            var approval = item.autoROI_approval
+                                            // if (approval === 1) {
+                                            //     roiAlarmStatus = 3
+                                            // } else if (approval === 0 && item.roi_alarmSwitch === 1 && item.roi_maxTemperature >= item.thermometer_info.level1 && item.roi_maxTemperature < item.thermometer_info.level2) {
+                                            //     roiAlarmStatus = 1
+                                            // } else if (approval === 0 && item.roi_alarmSwitch === 1 && item.roi_maxTemperature >= item.thermometer_info.level1 && item.roi_maxTemperature >= item.thermometer_info.level2) {
+                                            //     roiAlarmStatus = 2
+                                            // }
+                                            if (approval === 1) {
+                                                roiAlarmStatus = 3
+                                            } else if (approval === 0 && item.roi_alarmSwitch === 1) {
+                                                roiAlarmStatus = item.roi_alarmStatus
+                                            }
+                                            data.blob.push({
+                                                "number": item.roi_id + index,
+                                                "temperature_max": item.roi_maxTemperature,
+                                                "temperature_min": 0,
+                                                "temperature_point": {
+                                                    "median": {
+                                                        "start": item.thermometer_info.level1,
+                                                        "end": item.thermometer_info.level2
+                                                    },
+                                                    "temperature_ranger": {
+                                                        "max": item.thermometer_info.max,
+                                                        "min": item.thermometer_info.min
+                                                    }
+                                                },
+                                                "points": [
+                                                    blobs
+                                                ],
+                                                "alarm_status": item.roi_alarmSwitch,
+                                                "threshold": item.roi_thresholdManual,
+                                                "approval": roiAlarmStatus,
+                                                "temperature_avg": 46.3
+                                            })
+                                        })
+                                    }
+                                }
+                            })
+                        })
+                    }
+                }
+            })
+            if (state.dragObjectStatus && map !== null && !state.changeModeStatus) {
+                runSpot($displayRoi().spot ? data.spot : [])
+                runLine($displayRoi().line ? data.line : [])
+                runScope($displayRoi().scope ? data.scope : [])
+                if (state.pixiWebWorker !== null) {
+                    state.pixiWebWorker.postMessage({
+                        type: 'splineCurrent',
+                        objectName: 'blob',
+                        data: [JSON.parse(JSON.stringify($displayRoi().blob ? data.blob : [])), state.imgHeight, state.imgWidth]
+                    })
+                    state.pixiWebWorker.postMessage({
+                        type: 'splineCurrent',
+                        objectName: 'mask',
+                        data: [JSON.parse(JSON.stringify(data.mask)), state.imgHeight, state.imgWidth]
+                    })
+                }
+            }
+        }
+    }
+)
+watch(
+    () => props.wsRoiData1,
+    (e, prevData) => {
+        if (usePhoto) {
+            var colorItems = ['#4845FF', '#00C1DC', '#FF6D6D', '#9859FF']
+            var index = 0
+            // console.log("usePhoto", JSON.parse(JSON.stringify(e)));
+            state.ptz.forEach((item) => {
+                item.off()
+                item.remove()
+                // map.removeLayer(item);
+            })
+            state.cursingPoint_id.forEach((item) => {
+                item.off()
+                item.remove()
+                // map.removeLayer(item);
+            })
+            state.ptz = []
+            state.cursingPoint_id = []
+            var ptzContent = e.overall_ptzStatus.ptz_content
+            ptzContent.forEach((item1) => {
+                if (index > colorItems.length) {
+                    index = 0
+                }
+                var color = colorItems[index]
+                // PTZ
+                var a = [item1.ptz_location[1] * state.imgHeight, item1.ptz_location[0] * state.imgWidth]
+                var b = [item1.ptz_currentView_location[1] * state.imgHeight, item1.ptz_currentView_location[0] * state.imgWidth]
+                var object = initRadius(a, b, color, item1)
+                state.ptz.push(object)
+                // 預設點
+                var ptzCursingPointsContent = item1.ptz_cursingPoints_content
+                ptzCursingPointsContent.forEach((item1) => {
+                    var myIcon = L.divIcon({ html: `<div class="lnder0move" style="border: 2px solid ${color};"></div><div class="lnder0move-font" style="color:${color};">${item1.cursingPoint_name}</div>` });
+                    var marker = L.marker([item1.cursingPoint_location[1] * state.imgHeight, item1.cursingPoint_location[0] * state.imgWidth], {
+                        icon: myIcon,
+                        draggable: false
+                    }).addTo(map);
+                    state.cursingPoint_id.push(marker)
+                    myIcon = null
+                    marker = null
+                })
+                index++
+                color = null
+                a = null
+                b = null
+                object = null
+                ptzCursingPointsContent = null
+            })
+            colorItems = null
+            index = null
+            ptzContent = null
+        }
+    }
+)
+watch(
+    () => runIndex.index,
+    (data, prevData) => {
+        var loadingPlugin = 8 // 要載入幾個地圖套件(需含主程式)
+        // console.log(data);
+        if (data === loadingPlugin) {
+            if (usePhoto) {
+                leafletJsInitForPhoto()
+            } else {
+                leafletJsInit()
+            }
+        }
+    }
+)
+watch(
+    () => props.mainMode,
+    (data, prevData) => {
+        if (!usePhoto) {
+            state.changeModeStatus = true
+            // console.log('change mode:', data);
+            createMasking()
+            const runMask = () => {
+                state.changeModeStatus = false
+            }
+            // 未移除的物件
+            const runCleanRoi = () => {
+                runSpot([])
+                runLine([])
+                runScope([])
+                if (state.pixiWebWorker !== null) {
+                    state.pixiWebWorker.postMessage({
+                        type: 'splineCurrent',
+                        objectName: 'blob',
+                        data: [[], state.imgHeight, state.imgWidth]
+                    })
+                    state.pixiWebWorker.postMessage({
+                        type: 'splineCurrent',
+                        objectName: 'mask',
+                        data: [[], state.imgHeight, state.imgWidth]
+                    })
+                }
+                // 檢查是否還是否有未移除的物件
+                if (state.pixispot.length > 0 || state.pixiline.length > 0 || state.pixiscope.length > 0 || state.pixiblob.length > 0 || state.pixiMask.length > 0) {
+                    // Your code here
+                    setTimeout(() => {
+                        // console.log('runCleanRoi');
+                        runCleanRoi()
+                    }, 20)
+                } else {
+                    // console.log('state.pixispot', state.pixispot);
+                    runMask()
+                }
+            }
+            runCleanRoi()
+        }
+    }
+)
+
+//  測試子組件使用父組件方法
+const emit = defineEmits(['dataFromChild'])
+setTimeout(() => {
+    sendDataToParent()
+}, 1000)
+const sendDataToParent = () => {
+    const data = { example: 'some data' }
+    emit('dataFromChild', data)
+}
+const removeMap = () => {
+    map.eachLayer((layer) => {
+        layer.off();               // 移除事件監聽器
+        map.removeLayer(layer);    // 從地圖上移除
+    });
+    map.off();                      // 移除地圖上的所有事件
+    // map.remove();                   // 最後移除地圖本身
+    // map = null
+}
+const removeObject = (e) => {
+    console.log('removeObject', e);
+    e.eachLayer((layer) => {
+        layer.off();               // 移除事件監聽器
+        map.removeLayer(layer);    // 從地圖上移除
+    });
+    e.off()
+}
+//  測試子組件使用父組件方法 end
+const leafletJsInitForPhoto = () => {
+    state.imgWidth = 1324
+    state.imgHeight = -906
+    map = LMmap.value.leafletObject
+
+    map.setView([state.imgHeight / 2, state.imgWidth / 2], 1);
+    map._layersMaxZoom = 20;
+    var imageUrl = '/images/landfill.png', // /mock/ir13807.jpg
+        imageBounds = [[0, 0], [state.imgHeight, state.imgWidth]];
+    var imageOverlay = L.imageOverlay(imageUrl, imageBounds);
+    imageOverlay.setZIndex(-2);
+    imageOverlay.addTo(map);
+    map.fitBounds(imageBounds)
+    if (state.refreshMapTimeout !== null) {
+        clearTimeout(state.refreshMapTimeout)
+    }
+    state.refreshMapTimeout = setTimeout(() => {
+        removeMap()
+        state.ptz = []
+        state.cursingPoint_id = []
+        leafletJsInitForPhoto()
+        console.log('refresh Map');
+    }, 300 * 1000)
+    // 雷達
+
+    // initRadius([-400, 500], [-100, 300])
+    // marker.on('drag', (event) => {
+    //     var latlng = event.target.getLatLng();
+    //     rw.remove()
+    //     var r = (360 - calculateAngle(latlng, marker2.getLatLng())) + 90
+    //     if (r > 360) {
+    //         r = r - 360
+    //     }
+    //     rw = runRadius(latlng.lat, latlng.lng, calculatePixelDistance(marker2.getLatLng(), latlng), r, angle)
+    // });
+    // marker2.on('drag', (event) => {
+    //     var latlng = event.target.getLatLng();
+    //     rw.remove()
+    //     var r = (360 - calculateAngle(marker.getLatLng(), latlng)) + 90
+    //     if (r > 360) {
+    //         r = r - 360
+    //     }
+    //     rw = runRadius(marker.getLatLng().lat, marker.getLatLng().lng, calculatePixelDistance(latlng, marker.getLatLng()), r, angle)
+
+    // });
+
+}
+const initRadius = (a, b, color, data) => {
+    var rw = null
+    var angle = 25
+    var myIcon = L.divIcon({ html: `<div class="lnder0move-ptz" style="background-color: ${color};"></div><div class="lnder0move-font-ptz" style="color:${color};">${data.ptz_name}</div>` });
+    var marker = L.marker(a, {
+        icon: myIcon,
+        draggable: false
+    });
+    var marker2 = L.marker(b, {
+        icon: myIcon,
+        draggable: false
+    });
+    var latlng = marker.getLatLng();
+    var r = (360 - calculateAngle(latlng, marker2.getLatLng())) + 90
+    if (r > 360) {
+        r = r - 360
+    }
+    rw = runRadius(latlng.lat, latlng.lng, calculatePixelDistance(marker2.getLatLng(), latlng), r, angle)
+    marker.addTo(rw)
+    marker2.addTo(rw)
+    function calculatePixelDistance(pointAPixel, pointBPixel) {
+        var dx = pointBPixel.lng - pointAPixel.lng;
+        var dy = pointBPixel.lat - pointAPixel.lat;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    return rw
+}
+const runRadius = (y, x, radius, rotate, angle) => {
+    var center = [y, x];
+    var r = rotate
+    var startAngle = r - (angle / 2);
+    var endAngle = r + (angle / 2); // 结束角度，以度为单位
+    if (r > (angle / 2)) {
+        startAngle = startAngle - 360
+        endAngle = endAngle - 360
+    }
+    var polygon = null
+    var centerLine = null
+    var group = L.layerGroup([], {}).addTo(map);
+    const randerRadius = () => {
+        if (endAngle > 360) {
+            endAngle = 0
+            startAngle = endAngle - rotate;
+        }
+        var points = [center];
+        var lines = [center]
+        for (var i = startAngle; i <= endAngle; i++) {
+            var angle = i * Math.PI / 180;
+            var x = center[0] + radius * Math.cos(angle);
+            var y = center[1] + radius * Math.sin(angle);
+            points.push([x, y]);
+        }
+        var angle1 = ((startAngle / 2) + (endAngle / 2)) * Math.PI / 180;
+        var x1 = center[0] + (radius / 2) * Math.cos(angle1);
+        var y1 = center[1] + (radius / 2) * Math.sin(angle1);
+        lines.push([x1, y1]);
+        polygon = L.polygon(points, {
+            className: 'rotated-polygon', // Apply the class for rotation
+            weight: 0,
+            color: '#64646A',
+            fillColor: '#F6EE73',
+            fillOpacity: 0.7
+        }).addTo(group);
+        centerLine = L.polyline(lines, {
+            stroke: true,
+            weight: 1.5,
+            color: '#000',
+            // dashArray: '10, 10'
+        }).addTo(group);
+        var path = centerLine.getLatLngs();
+
+        // 创建标记
+        var imgurl = '/images/fs/current positionpoint_drag.svg'
+        var myIcon = L.icon({
+            iconUrl: imgurl,
+            iconSize: [34, 34],
+        });
+        var marker1 = L.marker(path[1], {
+            icon: myIcon,
+            opacity: 0,
+            draggable: true
+        }).addTo(group);
+
+        marker1.on('drag', (event) => {
+            var latlng = event.target.getLatLng();
+            // 判斷標記是否在路徑上
+            var closestPoint = L.GeometryUtil.closest(map, path, latlng);
+            // 如果标记不在路径上，则将标记移动到最近的路径点
+            if (!latlng.equals(closestPoint)) {
+                marker1.setLatLng(closestPoint);
+            }
+        });
+
+    }
+    randerRadius()
+    return group
+}
+const calculateAngle = (pointA, pointB) => {
+    const deltaX = pointB.lng - pointA.lng;
+    const deltaY = pointB.lat - pointA.lat;
+    const angleInRadians = Math.atan2(deltaY, deltaX);
+    const angleInDegrees = angleInRadians * 180 / Math.PI;
+    const brng = (angleInDegrees + 360) % 360; // 转换到0-360范围内
+    return brng;
+}
+const leafletJsInit = () => {
+    map = LMmap.value.leafletObject
+    // map.invalidateSize()
+    // map = L.map(refName)
+    // var testid = document.getElementById(refName)
+    // console.log("xxx", testid.value);
+    map.setView([state.imgHeight / 2, state.imgWidth / 2], 1);
+    map._layersMaxZoom = 20;
+    var markers = L.markerClusterGroup({
+        iconCreateFunction: (cluster) => {
+            return L.divIcon({ html: '<div class="markerClusterGroupStyle"><div class="markerClusterGroupStyleCount"><span>' + cluster.getChildCount() + '</span></div><div class="markerClusterGroupStyleIcon"><img src="/images/fs/iconporint-icon.svg" /></div></div>' });
+        },
+        maxClusterRadius: 20
+    });
+    map.addLayer(markers);
+    // console.log(markers);
+    const onMapClick = (e) => { }
+    // 移動
+    const onMapMove = (e) => {
+        // 新增line物件
+        if (state.lineTempAddObject !== null) {
+            var linelen = state.lineTempAddObject.getLatLngs()
+            linelen[1] = e.latlng
+            state.lineTempAddObject.setLatLngs(linelen)
+        }
+        // 新增scope物件
+        if (state.scopeTempAddObject !== null) {
+            var scopelen = state.scopeTempAddObject.getLatLngs()
+            scopelen[0][3] = e.latlng
+            scopelen[0][2].lng = e.latlng.lng
+            scopelen[0][0].lat = e.latlng.lat
+            state.scopeTempAddObject.setLatLngs(scopelen)
+        }
+        // 新增blob物件
+        if (state.blobStatusAdd) {
+            if (state.removePoint !== null) {
+                var map1 = null
+                if (state.moveRemovePoint) {
+                    map1 = state.AddTempPoints
+                } else {
+                    map1 = state.AddTempPoints.concat(e.latlng.lng, e.latlng.lat)
+                }
+                // map1.push(event.global.x, event.global.y)
+                state.pixiWebWorker.postMessage({
+                    type: 'splineCurrentOnly',
+                    data: [map1, state.moveRemovePoint]
+                })
+                map1 = null
+            }
+        }
+    }
+    // var backgroundRect = L.rectangle([[0, 0], [state.imgHeight, state.imgWidth]], { fillOpacity: 0.0001, color: "#00000000", weight: 0 }).addTo(map);
+    // backgroundRect.on('click', () => {
+    //     clearEventObject()
+    //     console.log('click video');
+    // })
+    // state.runPixijs(map)
+    var imageUrl = '/images/EMPTYv1-fill.png', // /mock/ir13807.jpg
+        imageBounds = [[0, 0], [state.imgHeight, state.imgWidth]];
+    var imageOverlay = L.imageOverlay(imageUrl, imageBounds);
+    imageOverlay.setZIndex(-2);
+    imageOverlay.addTo(map);
+    map.fitBounds(imageBounds)
+    map.on('click', onMapClick)
+    map.on('mousemove', onMapMove)
+    map.on('mousedown', (e) => {
+        state.mousesaveLocation.y = e.latlng.lat
+        state.mousesaveLocation.x = e.latlng.lng
+        if (e.originalEvent.which === 1) {
+            onCanvasDown(e)
+        }
+    })
+    map.on('contextmenu', (e) => {
+        removeAddRoiStatus()
+        // console.log(e);
+        // state.contextmenu = true
+        // state.MenuX = e.originalEvent.pageX
+        // state.MenuY = e.originalEvent.pageY
+    })
+    // 创建 video 元素
+    let randomstr = getRandomString(10)
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.controls = false;
+    video.muted = true;
+    video.loop = true;
+    // video.id = `video${camType}${camID}`;
+    video.id = `video${camType}${camID}-${state.randomID}`;
+    video.className = 'video-player';
+    // video.src = '/dist/videos/【飛鴿看風景】新北市-十分瀑布_The beautiful scenery of Taiwan_ 4k 60FPS.mp4';
+    // video.src = '/dist/videos/gay.mp4';
+    // video.src = '/dist/videos/8k_wh_TAIWAN.mp4';
+    // video.src = '';
+    var videoBounds = [[0, 0], [state.imgHeight, state.imgWidth]];
+    var videoTag = L.videoOverlay(video, videoBounds,).addTo(map);
+
+    videoTag.getElement().onload = function () {
+        // rotateImageOverlay(imageOverlay, 45); // 旋转 45 度
+    };
+    // 測試角度
+    // var testrotate = 'https://maps.lib.utexas.edu/maps/historical/newark_nj_1922.jpg',
+    //     testrotateBounds = [[0, 0], [-480, 640]];
+    // var testIMG = L.imageOverlay(testrotate, testrotateBounds).addTo(map);
+    // var r = 0
+    // setInterval(() => {
+    //     rotateImageOverlay(testIMG, r)
+    //     r = r + 0.01
+    //     if (r > 1) {
+    //         r = 0
+    //     }
+    //     state.rotat.rotated = r
+    // }, 33)
+    // // 旋转函数
+    // map.on('viewreset', () => {
+
+    //     rotateImageOverlay(testIMG, 45)
+    // });
+    // function rotateImageOverlay(tag, angle) {
+    //     var imgElement = tag.getElement();
+    //     var currentTransform = window.getComputedStyle(imgElement).getPropertyValue('transform');
+
+    //     if (currentTransform === 'none') {
+    //         currentTransform = '';
+    //     }
+    //     var newTransform = currentTransform + ` rotate(${angle}deg)`;
+    //     imgElement.style.transform = newTransform;
+    // }
+    // 測試角度 end
+    // runRTC(`video${camType}${camID}`, `http://192.168.0.173:3001/video/realtime/${camType}${camID}/`, 'vis') // [element id,video url]
+    const currentPort = window.location.port;
+    runRTC(`video${camType}${camID}-${state.randomID}`, `http://localhost:${currentPort}/video/realtime/${camType}${camID}`, 'vis') // [element id,video url]
+    // const drawCircle = () => {
+
+    // }
+    // var boundsScope = null
+    const animate = () => {
+        // randerRadius()
+        // 排序
+        if (state.objectMask !== null) {
+            state.objectMask.eachLayer((item) => {
+                if (props.mainMode === 'mask') {
+                    item.bringToFront()
+                } else {
+                    item.bringToBack()
+                }
+            })
+        }
+        // 多選框跟蹤
+        // if (state.map !== null) {
+        //     var p1 = []
+        //     state.pixiscope.forEach((item, index) => {
+        //         var object = item.pixi
+        //         var scope = null
+        //         object.eachLayer((layer) => {
+        //             if (layer.options?.objectType === "rectangle") {
+        //                 scope = layer
+        //                 // console.log(scope);
+        //             }
+        //         });
+        //         // console.log(scope.getLatLngs());
+        //         scope.getLatLngs()[0].forEach((item, index) => {
+        //             p1.push([item.lat, item.lng])
+        //         })
+        //         // if (index === 0) {
+        //         //     p1 = scope
+        //         // } else if (index === 1) {
+        //         //     p2 = scope
+        //         //     var bounds = L.bounds(p1.getBounds(), p2.getBounds())
+        //         //     console.log(bounds, p1.getBounds(), p2.getBounds());
+        //         // }
+        //     })
+        //     if (p1.length > 0) {
+        //         var polyline = L.polyline(p1);
+        //         if (boundsScope !== null) {
+        //             boundsScope.remove()
+        //             boundsScope = null
+        //         }
+        //         boundsScope = L.rectangle(polyline.getBounds(), { fill: false, color: 'red' }).addTo(state.map);
+        //     }
+        //     // console.log(polyline.getBounds());
+        // }
+        // 多選框跟蹤 end
+        requestAnimationFrame(animate);
+    }
+    // randerRadius()
+    animate();
+    // createMasking()
+
+
+    // 測試多個物件同時移動
+    document.addEventListener('keydown', (event) => {
+        if (event.ctrlKey) {
+            state.keyctrl = true
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        if (event.key === 'Control') {
+            state.keyctrl = false
+        }
+    });
+    state.focusObjectList = {
+        spot: [],
+        line: [],
+        scope: [],
+        blob: []
+    } // 集合要被移動的物件
+    var temp = {
+        spot: [],
+        line: [],
+        scope: [],
+        blob: []
+    }
+    var holdobject = false
+    var boundsScope = L.rectangle([[0, 0], [0, 0]], { fill: !state.keyctrl, fillOpacity: 0.001, color: "#FFF", weight: 3 }).addTo(map);
+
+    const animatetest = () => {
+        var p1 = []
+        state.focusObjectList.scope.forEach((item, index) => {
+            var scopeGroupList = item.getLayers()
+            for (var i = 0; i < scopeGroupList.length; i++) {
+                if (scopeGroupList[i].options.objectType === 'rectangle') {
+                    scopeGroupList[i].getLatLngs()[0].forEach((item, index) => {
+                        p1.push([item.lat, item.lng])
+                    })
+                    break;
+                }
+            }
+
+        })
+        state.focusObjectList.blob.forEach((item, index) => {
+            var blobGroupList = item.getLayers()
+            blobGroupList[0].getLatLngs()[0].forEach((item, index) => {
+                p1.push([item.lat, item.lng])
+            })
+            // p1 = [...p1, ...blobGroupList[0].getLatLngs()]
+        })
+        // console.log('p1', p1);
+        // if (boundsScope !== null) {
+        //     boundsScope.remove()
+        //     boundsScope = null
+        // }
+        if (p1.length > 0) {
+            var polyline = L.polyline(p1);
+            // boundsScope = L.rectangle(polyline.getBounds(), { fill: !keyctrl, fillOpacity : 0.001, color: 'red' }).addTo(state.map);
+            var tempScope = L.rectangle(polyline.getBounds())
+
+            boundsScope.setLatLngs(tempScope.getLatLngs())
+            boundsScope.setStyle({ fill: !state.keyctrl, fillOpacity: 0.001, color: '#FFF' })
+            boundsScope.bringToFront()
+            // console.log(polyline.getBounds());
+        } else {
+            boundsScope.setLatLngs([[0, 0], [0, 0]])
+        }
+        requestAnimationFrame(animatetest);
+        // console.log(JSON.parse(JSON.stringify(state.focusObjectList)));
+        // console.log(state.focusObjectList);
+        // setTimeout(() => animatetest(), 500)
+    }
+    animatetest()
+    boundsScope.on('mouseover', (e) => {
+        holdobject = true
+        state.dragObjectStatus = false
+    })
+    boundsScope.on('mouseout', (e) => {
+        holdobject = false
+        state.dragObjectStatus = true
+    })
+    var down = null
+    map.on('mousedown', (e) => {
+        down = {
+            lat: e.latlng.lat,
+            lng: e.latlng.lng
+        }
+        state.focusObjectList.scope.forEach((item, index) => {
+            var scopeGroupList = item.getLayers()
+            for (var i = 0; i < scopeGroupList.length; i++) {
+                if (scopeGroupList[i].options.objectType === 'rectangle') {
+                    // scopeGroupList[i].getLatLngs()[0].forEach((item, index) => {
+                    //     p1.push([item.lat, item.lng])
+                    // })
+                    temp.scope.push(scopeGroupList[i].getLatLngs())
+                    // console.log('scopeGroupList[i].getLatLngs()', scopeGroupList[i].getLatLngs());
+                    // temp.push({ latlng: scopeGroupList[i].getLatLngs(), id: item.options })
+                    break;
+                }
+            }
+        })
+        state.focusObjectList.blob.forEach((item, index) => {
+            var blobGroupList = item.getLayers()
+            temp.blob.push(blobGroupList[0].getLatLngs())
+        })
+        // state.focusObjectList.forEach((item) => {
+        //     temp.push(item.getLatLngs())
+        // })
+
+    })
+    map.on('mousemove', (e) => {
+        if (down !== null && holdobject) {
+            if (state.revisionObject.length > 0) {
+                for (var z = 0; z < state.revisionObject.length; z++) {
+                    state.revisionObject[z].remove()
+                }
+                state.revisionObject = []
+            }
+            if (state.blobPutTempPoint.length > 0) {
+                for (var z = 0; z < state.blobPutTempPoint.length; z++) {
+                    state.blobPutTempPoint[z].remove()
+                }
+                state.blobPutTempPoint = []
+            }
+            var lat = down.lat - e.latlng.lat
+            var lng = down.lng - e.latlng.lng
+            // console.log('test move', lat, lng);
+            // state.focusObjectList.forEach((item) => {
+            //     if (item.options.type === 'scope') {
+            //         console.log('move scope');
+            //     }
+            // })
+            Object.keys(temp).forEach((key) => {
+                // console.log('temp key', key);
+                temp[key].forEach((item, index) => {
+                    let type = key
+                    if (type === 'scope') {
+                        var newLocation = []
+                        item[0].forEach((item1, index1) => {
+                            newLocation.push([item1.lat - lat, item1.lng - lng])
+                        })
+                        var scopeGroupList = state.focusObjectList[key][index].getLayers()
+                        for (var i = 0; i < scopeGroupList.length; i++) {
+                            if (scopeGroupList[i].options.objectType === 'rectangle') {
+                                scopeGroupList[i].setLatLngs(newLocation)
+                                // break;
+                            } else {
+                                scopeGroupList[i].setLatLng(newLocation[1])
+                            }
+                        }
+                    } else if (type === 'blob') {
+                        var newLocation = []
+                        item[0].forEach((item1, index1) => {
+                            newLocation.push([item1.lat - lat, item1.lng - lng])
+                        })
+                        var blobGroupList = state.focusObjectList[key][index].getLayers()
+                        blobGroupList[0].setLatLngs(newLocation)
+                    }
+                })
+            })
+        }
+    })
+    map.on('mouseup', (e) => {
+        down = null
+        temp = {
+            spot: [],
+            line: [],
+            scope: [],
+            blob: []
+        }
+        state.focusObjectList.scope.forEach((item, index) => {
+            var scopeGroupList = item.getLayers()
+            for (var i = 0; i < scopeGroupList.length; i++) {
+                if (scopeGroupList[i].options.objectType === 'rectangle') {
+                    // scopeGroupList[i].getLatLngs()[0].forEach((item, index) => {
+                    //     p1.push([item.lat, item.lng])
+                    // })
+                    var getBounds = scopeGroupList[i].getLatLngs()
+                    var newLocation = [
+                        [getBounds[0][1].lat, getBounds[0][1].lng],
+                        [getBounds[0][3].lat, getBounds[0][3].lng]
+                    ]
+                    pushScope(newLocation, item.options.data)
+                    break;
+                }
+            }
+        })
+        state.focusObjectList.blob.forEach((item, index) => {
+            console.log('updata blob');
+        })
+        // console.log('test up');
+    })
+    const clearEventObject = () => {
+        // 清除scope 調整物件
+        if (state.revisionObject.length > 0) {
+            for (var z = 0; z < state.revisionObject.length; z++) {
+                state.revisionObject[z].remove()
+            }
+            state.revisionObject = []
+        }
+        state.focusObjectList = {
+            spot: [],
+            line: [],
+            scope: [],
+            blob: []
+        }
+    }
+    // state.refreshMapTimeout = setTimeout(() => {
+    //     removeMap()
+    //     const runCleanRoi = () => {
+    //         runSpot([])
+    //         runLine([])
+    //         runScope([])
+    //         if (state.pixiWebWorker !== null) {
+    //             state.pixiWebWorker.postMessage({
+    //                 type: 'splineCurrent',
+    //                 objectName: 'blob',
+    //                 data: [[], state.imgHeight, state.imgWidth]
+    //             })
+    //             state.pixiWebWorker.postMessage({
+    //                 type: 'splineCurrent',
+    //                 objectName: 'mask',
+    //                 data: [[], state.imgHeight, state.imgWidth]
+    //             })
+    //         }
+    //         // 檢查是否還是否有未移除的物件
+    //         if (state.pixispot.length > 0 || state.pixiline.length > 0 || state.pixiscope.length > 0 || state.pixiblob.length > 0 || state.pixiMask.length > 0) {
+    //             // Your code here
+    //             setTimeout(() => {
+    //                 // console.log('runCleanRoi');
+    //                 runCleanRoi()
+    //             }, 20)
+    //         }
+    //     }
+    //     runCleanRoi()
+    //     state.ptz = []
+    //     state.cursingPoint_id = []
+    //     state.pixireference = []
+    //     state.reference = []
+    //     state.pixispot = []
+    //     state.pixiline = []
+    //     state.pixiscope = []
+    //     state.revisionObject = []
+    //     state.revisionObjectleave = false
+    //     state.pixiblob = []
+    //     state.pixiJsRoiBlobData = []
+    //     state.pixiMask = []
+    //     state.pixiJsRoiMaskData = []
+    //     leafletJsInit()
+    //     console.log('refresh ROI');
+    // }, 30 * 1000)
+    // testrotate()
+}
+const getRandomString = (length) => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+const testrotate = () => {
+    var imageUrl = 'https://maps.lib.utexas.edu/maps/historical/newark_nj_1922.jpg';
+    var topleft = L.latLng(0, 0),
+        topright = L.latLng(0, 691),
+        bottomleft = L.latLng(-541, 0);
+
+    var imageOverlay = L.imageOverlay.rotated(imageUrl, topleft, topright, bottomleft, {
+        opacity: 1,
+        interactive: true
+    }).addTo(map);
+
+    var marker1 = L.marker(topleft, { draggable: true }).addTo(map),
+        marker2 = L.marker(topright, { draggable: true }).addTo(map),
+        marker3 = L.marker(bottomleft, { draggable: true }).addTo(map);
+    // 添加滑鼠事件來改變旋轉角度
+    const updateMarker = () => {
+        state.rotat.TL = marker1.getLatLng()
+        state.rotat.TR = marker2.getLatLng()
+        state.rotat.BL = marker3.getLatLng()
+    }
+    updateMarker()
+    function repositionImage() {
+        imageOverlay.reposition(marker1.getLatLng(), marker2.getLatLng(), marker3.getLatLng());
+        updateMarker()
+    };
+
+    marker1.on('drag dragend', repositionImage);
+    marker2.on('drag dragend', repositionImage);
+    marker3.on('drag dragend', repositionImage);
+}
+const createMasking = () => {
+
+    if (state.objectMask !== null) {
+        state.objectMask.remove()
+        state.objectMask = null
+    }
+    if (state.reqAnim !== null) {
+        // window.cancelAnimationFrame(state.reqAnim);
+        clearInterval(state.reqAnim)
+        state.reqAnim = null
+    }
+    var fillOpacity = props.mainMode === 'mask' ? 0.7 : 0.3
+    var group = L.layerGroup().addTo(map);
+
+    L.polygon([
+        [[0, 0], [state.imgHeight, 0], [state.imgHeight, state.imgWidth], [0, state.imgWidth]]
+    ], { stroke: false, color: '#000', fillOpacity }).addTo(group);
+    // mask.bringToFront()
+    state.objectMask = group
+    const processNewPath = () => {
+        var latlngs2233 = [
+            [
+                // [[0, 0], [-300, 0], [-300, state.imgWidth], [0, state.imgWidth]],
+                // [[-400, 400], [-600, 400], [-600, 800], [-400, 800]],
+                // [[-500, 0], [-500, 0], [-500, 700], [0, 700]]
+                [[0, 0], [state.imgHeight, 0], [state.imgHeight, state.imgWidth], [0, state.imgWidth]]
+            ], // outer ring
+            // [[-100, 100], [-200, 100], [-200, 200], [-100, 200]], // hole
+            // [[-300, 300], [-400, 300], [-400, 400], [-100, 400]] // hole
+        ];
+        return latlngs2233
+    }
+    const runAnime = () => {
+        var arr = []
+        var latlngs2233 = processNewPath()
+        state.pixiMask.forEach((item, index) => {
+            // latlngs2233[0].push(item.spline)
+            arr.push(item.spline)
+            // var newPath = runIntersection(latlngs2233[0][0], item.spline)
+            // if (newPath) {
+            //     latlngs2233[0].push(newPath)
+            // }
+            // latlngs2233[0].push(item.spline)
+        })
+        if (state.blobAddTempObject !== null) {
+            // console.log(state.blobAddTempObject.getLatLngs(), state.AddTempPoints);
+            // latlngs2233[0].push(state.blobAddTempObject.getLatLngs())
+            // latlngs2233[0].push(state.blobAddTempObject.getLatLngs())
+            const transformed = state.blobAddTempObject.getLatLngs().map(innerArray =>
+                innerArray.map(item => [item.lat, item.lng])
+            );
+            arr.push(transformed)
+            // var newPath = runIntersection(latlngs2233[0][0], transformed)
+            // if (newPath) {
+            //     latlngs2233[0].push(newPath)
+            // }
+        }
+        if (state.workerTurf !== null) {
+            state.workerTurf.postMessage({
+                type: 'intersection',
+                parameter: {
+                    main: latlngs2233,
+                    object: arr
+                }
+            })
+        }
+        // if (latlngs2233[0].length >= 3) {
+        //     var newPath = runIntersection(latlngs2233[0][1], latlngs2233[0][2])
+        //     latlngs2233[0].push(newPath)
+        // }
+        // mask.setLatLngs(latlngs2233)
+        // console.log('latlngs2233', latlngs2233);
+        // function runIntersection(path1, path2) {
+        //     const polygon1 = {
+        //         type: 'Feature',
+        //         geometry: {
+        //             type: 'Polygon',
+        //             coordinates: [
+        //                 path1
+        //             ],
+        //         },
+        //     };
+
+        //     const polygon2 = {
+        //         type: 'Feature',
+        //         geometry: {
+        //             type: 'Polygon',
+        //             coordinates: [
+        //                 path2
+        //             ],
+        //         },
+        //     };
+
+        //     // 計算交集
+        //     const intersection = turf.intersect(polygon1, polygon2);
+        //     // console.log('intersection', intersection);
+        //     if (intersection?.geometry.coordinates) {
+        //         return intersection.geometry.coordinates;
+        //     } else {
+        //         return false
+        //     }
+        // }
+        requestAnimationFrame(runAnime);
+    }
+    // const call = (timestamp) => {
+    runAnime()
+    // state.reqAnim = requestAnimationFrame(call);
+    // }
+    // state.reqAnim = requestAnimationFrame(call);
+    // state.reqAnim = setInterval(() => {
+    //     runAnime()
+    // }, 66)
+    // var polygon = turf.polygon([
+    //     [[0, 0], [state.imgHeight, 0], [state.imgHeight, state.imgWidth], [0, state.imgWidth], [0, 0]]
+    // ]);
+    // var mask = turf.polygon([
+    //     [[-100, 0], [-100, 0], [-100, 300], [0, 300], [-100, 0]],
+    //     [[-150, 0], [-150, 0], [-200, 600], [0, 600], [-150, 0]]
+    // ]);
+
+    // var masked = turf.mask(polygon, mask);
+    // L.polygon(masked.geometry.coordinates, { stroke: false, color: '#000', fillOpacity: 0.6 }).addTo(map);
+    // console.log(masked.geometry.coordinates);
+
+}
+const putVideo = () => {
+    state.rtcVIDETYPEIndex++
+    if (state.rtcVIDETYPEIndex >= state.rtcVIDEOLIST.length) {
+        state.rtcVIDETYPEIndex = 0
+    }
+    // state.rtcVIDETYPE = state.rtcVIDETYPE === 'vis' ? 'ir' : 'vis'
+    const video = document.getElementById('video1');
+    // console.log(state.rtcVIDEOLIST[state.rtcVIDETYPEIndex], state.rtcVIDETYPEIndex);
+    video.srcObject = state.rtcVIDEOLIST[state.rtcVIDETYPEIndex];
+
+}
+// 狀態 = 新增ROI
+const requestBtnGroupEvent = (data) => {
+    console.log('requestBtnGroupEvent', data);
+    if (data !== 'remove') {
+        // state.removeAddRoistatus()
+        removeAddRoiStatus()
+        const runMask = () => {
+            if (data === 'mask-scope') {
+                state.scopeTempAddObject = null
+                state.scopeStatusAdd = true
+                state.dragObjectStatus = false
+            } else if (data === 'mask-polygon') {
+                state.blobStatusAdd = true
+                state.dragObjectStatus = false
+            } else if (data === 'mask-blob') {
+                state.blobStatusAdd = true
+                state.dragObjectStatus = false
+            }
+        }
+        if (data !== 'blob') {
+            // const canvas = document.getElementById(state.canvasId)
+            // var mask = new PIXI.Graphics();
+            // mask.name = 'mask'
+            // mask.beginFill('rgba(0,0,0,0.01)');
+            // mask.drawRect(0, 0, canvas.getBoundingClientRect().width + 200, canvas.getBoundingClientRect().height + 200);
+            // mask.endFill();
+            // state.appPixi.stage.addChild(mask);
+            // state.stopListener = mask
+            // document.body.style.cursor = 'crosshair'
+            document.body.style.setProperty('cursor', 'crosshair', 'important');
+            // mask = null
+        }
+        if (data === 'spot') {
+            state.spotStatusAdd = true
+            state.dragObjectStatus = false
+        } else if (data === 'scope') {
+            state.scopeTempAddObject = null
+            state.scopeStatusAdd = true
+            state.dragObjectStatus = false
+        } else if (data === 'line') {
+            state.lineTempAddObject = null
+            state.lineStatusAdd = true
+            state.dragObjectStatus = false
+        } else if (data === 'blob') {
+            // state.blobAddSwitch()
+            state.blobStatusAdd = true
+            state.dragObjectStatus = false
+        } else if (data === 'mask-scope') {
+            // console.log('add mask-scope');
+            runMask()
+        } else if (data === 'mask-polygon') {
+            // console.log('add mask-polygon');
+            runMask()
+        } else if (data === 'mask-blob') {
+            // console.log('add mask-blob');
+            runMask()
+        }
+
+        // const targetElement = document.querySelector('.map-top-b');
+        // targetElement.classList.add('map-top-c');
+        // thi?s.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: `進入新增${data}物件模式，取消此模式請在串流畫面中點擊滑鼠右鍵`, type: 3, timeout: 0, session: 'ADD' } });
+    } else {
+        var stateSpotData = {
+            type: 'ROI',
+            method: 'modify',
+            // cam_id: state.$route.query.cam,
+            session: Math.random().toString(36).substr(2),
+            content: {
+                RoiType: 'removeAll',
+            },
+        }
+        // emit('maskloing', true)
+        state.ws3.send(JSON.stringify(stateSpotData))
+    }
+}
+const removeAddRoiStatus = (e) => {
+    if (state.spotStatusAdd || state.scopeStatusAdd || state.lineStatusAdd || state.blobStatusAdd)
+        // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: '已點擊滑鼠右鍵取消新增ROI模式', type: 2, timeout: 1 } });
+        if (state.spotStatusAdd) {
+            state.spotStatusAdd = false
+            state.dragObjectStatus = true
+        }
+    if (state.lineStatusAdd) {
+        if (state.lineTempAddObject !== null) {
+            state.lineTempAddObject.remove()
+            state.lineTempAddObject = null
+        }
+        state.lineTempAddLocation = []
+        state.lineStatusAdd = false
+        state.dragObjectStatus = true
+    }
+    if (state.scopeStatusAdd) {
+        if (state.scopeTempAddObject !== null) {
+            state.scopeTempAddObject.remove()
+            state.scopeTempAddObject = null
+        }
+        state.scopeTempAddLocation = []
+        state.scopeStatusAdd = false
+        state.dragObjectStatus = true
+    }
+    if (state.blobStatusAdd !== null) {
+        state.moveRemovePoint = false
+        state.AddTempPoints = []
+        if (state.blobAddTempObject !== null) {
+            state.blobAddTempObject.remove()
+            state.blobAddTempObject = null
+        }
+        if (state.removePoint !== null) {
+            state.removePoint.remove()
+            state.removePoint = null
+        }
+        state.blobStatusAdd = false;
+        state.dragObjectStatus = true
+    }
+}
+const onCanvasDown = (e) => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var x = e.latlng.lng
+    var y = e.latlng.lat
+    // 新增
+    if (state.spotStatusAdd) {
+        // var tempAddSpot = {
+        //     type: "ROI",
+        //     method: "add",
+        //     content: {
+        //         report_id: "",
+        //         item_id: "",
+        //         // state.$route.query.reportID
+        //         RoiType: "spot",
+        //         alarm_status: 0,
+        //         threshold: 30.0,
+        //         group_name: "",
+        //         group_id: 0,
+        //         points: {
+        //             A: {
+        //                 x: [x / width],
+        //                 y: [y / height]
+        //             },
+        //             B: {
+        //                 x: [],
+        //                 y: []
+        //             }
+        //         }
+        //     },
+        //     session: Math.random().toString(36).substr(2)
+        // }
+        var tempAddSpot = {
+            "feature": "roi",
+            "method": "set_roiExist",
+            "session": Math.random().toString(36).substr(2),
+            "content": {
+                "type": 0,
+                "content": {
+                    "camera_id": camID,
+                    "cursingPoint_id": props.cursingPointValue,
+                    "image_type": camType,
+                    "roi_type": "spot",
+                    "roi_nodeManual": [
+                        x / width,
+                        y / height,
+                    ],
+                    "roi_alarmSwitch": 0,
+                    "roi_number": "",
+                    "roi_name": "",
+                    "roi_group_id": 1
+                }
+            }
+        }
+        // console.log(tempAddSpot);
+        // state.$emit('maskloing', true)
+        state.tempROIdata = tempAddSpot
+        state.inputRoiNameWindow = true
+        // state.ws3.send(JSON.stringify(tempAddSpot))
+        // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'SPOT 完成新增', type: 0, timeout: 1 } });
+        // if (state.stopListener !== null) {
+        //     state.stopListener.destroy()
+        //     state.stopListener = null
+        // }
+        state.spotStatusAdd = false
+        state.dragObjectStatus = true
+        document.body.style.cursor = 'auto'
+    }
+    if (state.lineStatusAdd) {
+        state.lineTempAddLocation.push([y, x])
+        if (state.lineTempAddLocation.length === 1) {
+            var latlngs = [
+                [y, x],
+                [y, x],
+            ];
+            state.lineTempAddObject = L.polyline(latlngs, { color: '#fff' }).addTo(map);
+        } else if (state.lineTempAddLocation.length === 2) {
+            var newLocation = state.lineTempAddObject.getLatLngs()
+            // var tempAddLine = {
+            //     type: "ROI",
+            //     // cam_id: "xxxx",
+            //     method: "add",
+            //     content: {
+            //         RoiType: "line",
+            //         alarm_status: 0,
+            //         threshold: 30.0,
+            //         group_name: "",
+            //         group_id: 0,
+            //         points: {
+            //             A: {
+            //                 x: [newLocation[0].lng / width],
+            //                 y: [newLocation[0].lat / height]
+            //             },
+            //             B: {
+            //                 x: [newLocation[1].lng / width],
+            //                 y: [newLocation[1].lat / height]
+            //             }
+            //         }
+            //     },
+            //     session: Math.random().toString(36).substr(2)
+            // }
+            var tempAddLine = {
+                "feature": "roi",
+                "method": "set_roiExist",
+                "session": Math.random().toString(36).substr(2),
+                "content": {
+                    "type": 0,
+                    "content": {
+                        "camera_id": camID,
+                        "cursingPoint_id": props.cursingPointValue,
+                        "image_type": camType,
+                        "roi_type": "line",
+                        "roi_nodeManual": [
+                            newLocation[0].lng / width,
+                            newLocation[0].lat / height,
+                            newLocation[1].lng / width,
+                            newLocation[1].lat / height
+                        ],
+                        "roi_alarmSwitch": 0,
+                        "roi_number": "",
+                        "roi_name": "",
+                        "roi_group_id": 1
+                    }
+                }
+            }
+            // state.ws3.send(JSON.stringify(tempAddLine))
+            state.tempROIdata = tempAddLine
+            state.inputRoiNameWindow = true
+            state.lineTempAddObject.remove()
+            state.lineTempAddObject = null
+            state.lineTempAddLocation = []
+            state.lineStatusAdd = false
+            state.dragObjectStatus = true
+            // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'line 完成新增', type: 0, timeout: 1 } });
+        }
+    }
+    if (state.scopeStatusAdd) {
+        state.scopeTempAddLocation.push([y, x])
+        if (state.scopeTempAddLocation.length === 1) {
+            var bounds = [
+                [y, x],
+                [y, x],
+            ];
+            state.scopeTempAddObject = L.rectangle(bounds, { color: "#fff", weight: 1 }).addTo(map);
+        } else if (state.scopeTempAddLocation.length === 2) {
+            var newLocation = state.scopeTempAddObject.getLatLngs()
+            // var tempAddscope = {
+            //     type: "ROI",
+            //     // cam_id: "xxxx",
+            //     method: "add",
+            //     content: {
+            //         RoiType: "scope",
+            //         alarm_status: 0,
+            //         threshold: 30.0,
+            //         group_name: "",
+            //         group_id: 0,
+            //         points: {
+            //             A: {
+            //                 x: [newLocation[0][1].lng / width],
+            //                 y: [newLocation[0][1].lat / height]
+            //             },
+            //             B: {
+            //                 x: [newLocation[0][3].lng / width],
+            //                 y: [newLocation[0][3].lat / height]
+            //             }
+            //         }
+            //     },
+            //     session: Math.random().toString(36).substr(2)
+            // }
+            var tempAddscope = {
+                "feature": "roi",
+                "method": "set_roiExist",
+                "session": Math.random().toString(36).substr(2),
+                "content": {
+                    "type": 0,
+                    "content": {
+                        "camera_id": camID,
+                        "cursingPoint_id": props.cursingPointValue,
+                        "image_type": camType,
+                        "roi_type": "scope",
+                        "roi_nodeManual": [
+                            newLocation[0][1].lng / width,
+                            newLocation[0][1].lat / height,
+                            newLocation[0][3].lng / width,
+                            newLocation[0][3].lat / height
+                        ],
+                        "roi_alarmSwitch": 0,
+                        "roi_number": "",
+                        "roi_name": "",
+                        "roi_group_id": 1
+                    }
+                }
+            }
+            // state.ws3.send(JSON.stringify(tempAddscope))
+            state.tempROIdata = tempAddscope
+            state.inputRoiNameWindow = true
+            state.scopeTempAddObject.remove()
+            state.scopeTempAddObject = null
+            state.scopeTempAddLocation = []
+            state.scopeStatusAdd = false
+            state.dragObjectStatus = true
+            // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'scope 完成新增', type: 0, timeout: 1 } });
+        }
+    }
+    if (state.blobStatusAdd && state.removePoint === null) {
+        // state.removePoint = 
+        var latlngs = [[y, x], [y, x]];
+        var tempblob = L.polygon(latlngs, { color: '#fff' }).addTo(map);
+        var myIcon = L.divIcon({ html: `<div class="removepoint"></div>` });
+        var removePoint = L.marker([y, x], { icon: myIcon, draggable: false }).addTo(map);
+        removePoint.on('mouseover', e => { state.moveRemovePoint = true })
+        removePoint.on('mouseout', e => { state.moveRemovePoint = false })
+        removePoint.on('click', e => { endAddBlob() })
+        state.removePoint = removePoint
+        state.AddTempPoints.push(x, y)
+
+        state.blobAddTempObject = tempblob
+    } else if (state.blobStatusAdd && state.removePoint !== null) {
+        if (!state.moveRemovePoint) {
+            state.AddTempPoints.push(x, y)
+        }
+    }
+    // 修改
+    // e.target.eachLayer(function (layer) {
+    //     console.log(layer);
+    // });
+}
+const inputRoiName = (e) => {
+    if (e === 'save') {
+        state.tempROIdata.content.content.roi_name = state.reNameValue
+        state.ws3.send(JSON.stringify(state.tempROIdata))
+    }
+    state.inputRoiNameWindow = false
+    state.reNameValue = ''
+    state.tempROIdata = {}
+
+}
+const mousedown = (e) => {
+    console.log('canvas mousedown');
+}
+const mouseup = (e) => {
+    console.log('canvas mouseup');
+}
+const mouseover = (e) => {
+    console.log('canvas mouseover');
+}
+const mousemove = (e) => {
+    console.log('canvas mousemove', e.target.getLatLngs());
+}
+const mouseout = (e) => {
+    console.log('canvas mouseout');
+}
+const roundDown = (num, decimal) => {
+    return Math.floor((num + Number.EPSILON) * Math.pow(10, decimal)) / Math.pow(10, decimal);
+}
+const runSpot = (data) => {
+    var len = data.length
+    // console.log(data, len);
+    var oldData = state.pixispot
+    var oldDataLen = state.pixispot.length
+    try {
+        for (var z = 0; z < oldDataLen; z++) {
+            var selectRoi1 = data.find((item) => item.number.toString() === oldData[z].data.number.toString())
+            if (selectRoi1 === undefined) {
+                // oldData[z].pixi.destroy()
+                // console.log('spot object', oldData[z].pixi);
+                oldData[z].pixi.eachLayer((layer) => {
+                    layer.off();               // 移除事件監聽器
+                    map.removeLayer(layer);    // 從地圖上移除
+                });
+                oldData[z].pixi.remove()
+                oldData = oldData.filter(obj => obj.data.number !== oldData[z].data.number);
+            }
+            selectRoi1 = null
+        }
+    } catch (error) {
+        console.log("Spot function", error);
+    }
+    for (var x = 0; x < len; x++) {
+        var spotfindIndex = oldData.findIndex((item) => item.data.number.toString() === data[x].number.toString())
+        data[x].temperature = roundDown(data[x].temperature, 1)
+        if (spotfindIndex !== -1) {
+            var newAlarm = data[x].alarm_status === 1 && data[x].temperature >= data[x].threshold
+            var oldAlarm = oldData[spotfindIndex].data.alarm_status === 1 && oldData[spotfindIndex].data.temperature >= oldData[spotfindIndex].data.threshold
+            if (
+                JSON.stringify(data[x].position) === JSON.stringify(oldData[spotfindIndex].data.position)
+                && newAlarm === oldAlarm
+            ) {
+                oldData[spotfindIndex].data = data[x]
+            } else {
+                // oldData[spotfindIndex].pixi.destroy()
+                oldData[spotfindIndex].pixi.remove()
+                oldData[spotfindIndex].data = data[x]
+                oldData[spotfindIndex].pixi = addpoint({ x: data[x].position.x, y: data[x].position.y, tempPointID: oldData[spotfindIndex].tempPointID }, data[x], 'spot', true)
+            }
+            newAlarm = null
+            oldAlarm = null
+        } else {
+            if (map !== null) {
+                var tempPointID = Math.random().toString(36).substr(2)
+                var temppixijsdata = addpoint({ x: data[x].position.x, y: data[x].position.y, tempPointID }, data[x], 'spot', true)
+                oldData.push({
+                    data: data[x],
+                    pixi: temppixijsdata,
+                    tempPointID
+                })
+            }
+            // temppixijsdata = null
+        }
+        spotfindIndex = null
+    }
+    state.pixispot = oldData
+    len = null
+    oldData = null
+    oldDataLen = null
+}
+const addpoint = (data, roidata, name, dragging) => {
+    // var canvas = document.getElementById(state.canvasId)
+    var tempPointID = data.tempPointID
+    // console.log('tempPointID', tempPointID);
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var imgurl = '/images/spot_1.png'
+    var group = L.layerGroup().addTo(map);
+    var myIcon = L.icon({
+        iconUrl: imgurl,
+        iconSize: [33, 33],
+        iconAnchor: [16.5, 16.5],
+        // popupAnchor: [-3, -76],
+        // shadowUrl: 'my-icon-shadow.png',
+        // shadowSize: [68, 95],
+        // shadowAnchor: [22, 94]
+    });
+    var opacity = props.mainMode === 'mask' ? 0.3 : 1
+    var draggable = props.mainMode === 'mask' || props.mainMode === 'review' ? false : true
+    var myIcon1 = L.divIcon({ html: `<div class="spot-div-number"><span>${roidata.number}</span></div>` });
+    var tempNumPointDiv = L.divIcon({ html: `<div class="temperature-bar-main"><div class="temperature-bar-bubble"><div class="temperature-bar-bubble-number" id="temperature-bar-bubble-number-${tempPointID}">0</div></div><div class="temperature-bar-canvas"><div class="temperature-bar" id="temperature-bar-${tempPointID}"></div></div></div>` });
+    var number = L.marker([data.y * height, data.x * width], { icon: myIcon1, draggable, opacity }).addTo(group);
+    var tempNumPoint = L.marker([data.y * height, data.x * width], { icon: tempNumPointDiv, draggable: false, opacity }).addTo(group); // 
+    var point = L.marker([data.y * height, data.x * width], { icon: myIcon, draggable, opacity }).addTo(group);
+    const addDragHandlers = (draggableElement, targetElement) => {
+        draggableElement.on('dragstart', (e) => {
+            state.dragObjectStatus = false
+        })
+        draggableElement.on('drag', (e) => {
+            // state.pushSpot({ location: e.target.getLatLng(), id: roidata.number }) // 註解可減少耗能
+            targetElement.setLatLng(e.target.getLatLng())
+            tempNumPoint.setLatLng(e.target.getLatLng())
+        });
+        draggableElement.on('dragend', (e) => {
+            pushSpot({ location: e.target.getLatLng(), id: roidata.number })
+            state.dragObjectStatus = true
+        });
+    };
+    // if (props.mainMode !== 'review') {
+    addDragHandlers(point, number);
+    addDragHandlers(number, point);
+    // }
+    // var alarm = false
+    // var color = '#ffffff'
+    // var number = 'R'
+    // if (name === 'spot') {
+    //     number = roidata.number
+    // }
+    // if (roidata.alarm_status === 1 && roidata.temperature >= roidata.threshold) {
+    //     imgurl = '/images/spot_1_red.png'
+    //     color = '#B82E40'
+    //     alarm = true
+    // }
+    // var group = new PIXI.Container();
+    // state.appPixi.stage.addChild(group);
+    // group.x = data.x * width;
+    // group.y = data.y * height;
+    // group.name = name
+    // if (name === 'spot') {
+    //     group.custom = {
+    //         number
+    //     }
+    // }
+    // group.interactive = dragging;
+    // group.cursor = dragging ? 'pointer' : 'auto';
+    // var newSprite = PIXI.Sprite.from(imgurl);
+    // group.addChild(newSprite);
+    // newSprite.x = -16.5
+    // newSprite.y = -16.5
+    // var graphics = new PIXI.Graphics();
+    // if (!alarm) {
+    //     graphics.lineStyle(1, "rgb(0,0,0)", 1);
+    // }
+    // graphics.beginFill(color, 1);
+    // graphics.drawCircle(-20, -20, 10);
+    // graphics.endFill();
+    // group.addChild(graphics);
+    // var style = new PIXI.TextStyle({
+    //     fontSize: 16,
+    // });
+    // var basicText = new PIXI.Text(number, style);
+    // if (parseInt(number) < 10 || number === 'R') {
+    //     basicText.x = -25.5;
+    //     basicText.y = -28.5;
+    // } else {
+    //     basicText.x = -29.5;
+    //     basicText.y = -28.5;
+    // }
+    // group.addChild(basicText);
+    // group.on('mousedown', (e) => { state.onDragStart(e, 'spot') });
+    return group
+}
+const pushSpot = (data) => {
+
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var findindex1 = state.pixispot.findIndex((item) => parseInt(item.data.number) === parseInt(data.id))
+    var newPosition = {
+        x: data.location.lng / width,
+        y: data.location.lat / height
+    }
+    // state.pixispot[findindex1].position = newPosition
+    var stateSpotData = {
+        type: 'ROI',
+        method: 'modify',
+        // cam_id: state.$route.query.cam,
+        session: Math.random().toString(36).substr(2),
+        content: {
+            RoiType: 'spot',
+            id: parseInt(data.id),
+            alarm_status: state.pixispot[findindex1].data.alarm_status,
+            threshold: state.pixispot[findindex1].data.threshold,
+            group_name: '',
+            group_id: '',
+            points: {
+                A: {
+                    x: [parseFloat(newPosition.x)],
+                    y: [parseFloat(newPosition.y)]
+                },
+                B: {
+                    x: [],
+                    y: []
+                }
+            }
+        },
+    }
+    // state.$emit('maskloing', true)
+    state.ws3.send(JSON.stringify(stateSpotData))
+    // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'SPOT 已更新', type: 0, timeout: 1 } });
+    // state.tempSetScopenumber = null
+    // state.newSpotLocation = { x: 0, y: 0 }
+    // findindex1 = null
+    // newPosition = null
+    // stateSpotData = null
+    // canvas = null
+}
+const runLine = (data) => {
+    var len = data.length
+    var oldData = state.pixiline
+    var oldDataLen = state.pixiline.length
+    try {
+        for (var z1 = 0; z1 < oldDataLen; z1++) {
+            var selectRoi1 = data.find((item) => JSON.stringify(item.number) === JSON.stringify(oldData[z1].data.number))
+            if (selectRoi1 === undefined) {
+                oldData[z1].pixi.remove()
+                oldData = oldData.filter(obj => obj.data.number !== oldData[z1].data.number);
+            }
+            selectRoi1 = null
+        }
+    } catch (error) {
+        console.log("runLine function", error);
+    }
+    // var oldDataLen = state.line.length
+    for (var x = 0; x < len; x++) {
+        data[x].temperature_max = roundDown(data[x].temperature_max, 1)
+        var linefindIndex = oldData.findIndex((item) => item.data.number.toString() === data[x].number.toString())
+        if (linefindIndex !== -1) {
+            var newAlarm = data[x].alarm_status === 1 && data[x].temperature_max >= data[x].threshold
+            var oldAlarm = oldData[linefindIndex].data.alarm_status === 1 && oldData[linefindIndex].data.temperature_max >= oldData[linefindIndex].data.threshold
+            if (
+                JSON.stringify(data[x].position_point_A) === JSON.stringify(oldData[linefindIndex].data.position_point_A) && JSON.stringify(data[x].position_point_B) === JSON.stringify(oldData[linefindIndex].data.position_point_B)
+                && newAlarm === oldAlarm
+            ) {
+                oldData[linefindIndex].data = data[x]
+            } else {
+                oldData[linefindIndex].pixi.remove()
+                oldData[linefindIndex].data = data[x]
+                oldData[linefindIndex].pixi = pixiaddLine(data[x], 'line', tempPointID = oldData[linefindIndex].tempPointID)
+            }
+            newAlarm = null
+            oldAlarm = null
+        } else {
+            var tempPointID = Math.random().toString(36).substr(2)
+            oldData.push({
+                data: data[x],
+                pixi: pixiaddLine(data[x], 'line', tempPointID),
+                tempPointID
+            })
+        }
+        linefindIndex = null
+    }
+    state.pixiline = oldData
+    len = null
+    oldData = null
+    oldDataLen = null
+}
+const pixiaddLine = (data, name, tempPointID) => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    // var tempPointID = data.tempPointID
+    // console.log(tempPointID);
+    var group = L.layerGroup().addTo(map);
+    var latlngs = [
+        [data.position_point_A.y * height, data.position_point_A.x * width],
+        [data.position_point_B.y * height, data.position_point_B.x * width],
+    ]
+    var opacity = props.mainMode === 'mask' ? 0.3 : 1
+    var draggable = props.mainMode === 'mask' || props.mainMode === 'review' ? false : true
+    var lines = []
+    lines[0] = L.polyline(latlngs, {
+        stroke: true,
+        weight: 3,
+        color: '#000',
+    }).addTo(group);
+    lines[1] = L.polyline(latlngs, {
+        stroke: true,
+        weight: 2,
+        color: '#fff',
+    }).addTo(group);
+    var tempNumPointDiv = L.divIcon({ html: `<div class="temperature-bar-main"><div class="temperature-bar-bubble"><div class="temperature-bar-bubble-number" id="temperature-bar-bubble-number-${tempPointID}">0</div></div><div class="temperature-bar-canvas"><div class="temperature-bar" id="temperature-bar-${tempPointID}"></div></div></div>` });
+    var tempNumPoint = L.marker([data.position_point_B.y * height, data.position_point_B.x * width], { icon: tempNumPointDiv, draggable: false, opacity }).addTo(group);
+    var myIcon = L.divIcon({ html: `<div class="spot-div-number"><span>${data.number}</span></div>` });
+    var myPoint = L.divIcon({ html: `<div class="div-point"></div>` });
+    var numberPoint = L.marker([data.position_point_B.y * height, data.position_point_B.x * width], { icon: myIcon, draggable, opacity }).addTo(group);
+    var pointB = L.marker([data.position_point_B.y * height, data.position_point_B.x * width], { icon: myPoint, draggable, opacity }).addTo(group);
+    var pointA = L.marker([data.position_point_A.y * height, data.position_point_A.x * width], { icon: myPoint, draggable, opacity }).addTo(group);
+
+    const addDragHandlers = (draggableElement, targetLinesElement, notmovedElement, type) => {
+        draggableElement.on('dragstart', (e) => {
+            state.dragObjectStatus = false
+        })
+        draggableElement.on('drag', (e) => {
+            var latlngs = type === 'B' ? [notmovedElement.getLatLng(), e.target.getLatLng()] : [e.target.getLatLng(), notmovedElement.getLatLng()]
+            targetLinesElement.forEach((item) => {
+                item.setLatLngs(latlngs)
+            })
+            if (type === 'B') {
+                numberPoint.setLatLng(e.target.getLatLng())
+                tempNumPoint.setLatLng(e.target.getLatLng())
+            }
+            pushline({ location: latlngs, id: data.number })
+        });
+        draggableElement.on('dragend', (e) => {
+            var latlngs = type === 'B' ? [notmovedElement.getLatLng(), e.target.getLatLng()] : [e.target.getLatLng(), notmovedElement.getLatLng()]
+            pushline({ location: latlngs, id: data.number })
+            state.dragObjectStatus = true
+        });
+    };
+    addDragHandlers(pointB, lines, pointA, 'B');
+    addDragHandlers(pointA, lines, pointB, 'A');
+    return group
+}
+const pushline = (e) => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    // var canvas = document.getElementById(state.canvasId)
+    var findindex = state.pixiline.findIndex((item) => parseInt(item.data.number) === parseInt(e.id))
+    var data = state.pixiline[findindex].data
+    var LineData = {
+        type: 'ROI',
+        method: 'modify',
+        session: Math.random().toString(36).substr(2),
+        content: {
+            RoiType: 'line',
+            id: data.number,
+            alarm_status: data.alarm_status,
+            threshold: data.threshold,
+            group_name: '',
+            group_id: '',
+            points: {
+                A: {
+                    x: [e.location[0].lng / width],
+                    y: [e.location[0].lat / height]
+                },
+                B: {
+                    x: [e.location[1].lng / width],
+                    y: [e.location[1].lat / height]
+                }
+            }
+        },
+    }
+    // state.$emit('maskloing', true)
+    state.ws3.send(JSON.stringify(LineData))
+    // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'LINE 已更新', type: 0, timeout: 1 } });
+    // findindex = null
+    // data = null
+    // LineData = null
+    // canvas = null
+}
+const runScope = (data) => {
+    var len = data.length
+    var oldData = state.pixiscope
+    var oldDataLen = state.pixiscope.length
+    try {
+        for (var z1 = 0; z1 < oldDataLen; z1++) {
+            var selectRoi1 = data.find((item) => JSON.stringify(item.number) === JSON.stringify(oldData[z1].data.number))
+            if (selectRoi1 === undefined) {
+                oldData[z1].pixi.remove()
+                oldData = oldData.filter(obj => obj.data.number !== oldData[z1].data.number);
+            }
+            selectRoi1 = null
+        }
+    } catch (error) {
+        console.log(error);
+    }
+    for (var x = 0; x < len; x++) {
+        data[x].temperature_max = roundDown(data[x].temperature_max, 1)
+        var scopefindIndex = oldData.findIndex((item) => item.data.number.toString() === data[x].number.toString())
+        if (scopefindIndex !== -1) {
+            // 超溫判斷
+            var newAlarm = data[x].alarm_status === 1 && data[x].temperature_max >= data[x].threshold
+            var oldAlarm = oldData[scopefindIndex].data.alarm_status === 1 && oldData[scopefindIndex].data.temperature_max >= oldData[scopefindIndex].data.threshold
+            if (
+                JSON.stringify(data[x].position_point_A) === JSON.stringify(oldData[scopefindIndex].data.position_point_A)
+                && JSON.stringify(data[x].position_point_B) === JSON.stringify(oldData[scopefindIndex].data.position_point_B)
+                && JSON.stringify(data[x].approval) === JSON.stringify(oldData[scopefindIndex].data.approval)
+                && newAlarm === oldAlarm
+            ) {
+                oldData[scopefindIndex].data = data[x]
+            } else {
+                oldData[scopefindIndex].pixi.remove()
+                oldData[scopefindIndex].data = data[x]
+                let groupInfo = pixiaddScope(data[x], 'scope', tempPointID = oldData[scopefindIndex].tempPointID)
+                oldData[scopefindIndex].pixi = groupInfo
+                // 取代選取陣列中的物件
+                let findFocusObject = state.focusObjectList.scope.findIndex((item) => item.options.id === groupInfo.options.id)
+                if (findFocusObject !== -1) {
+                    state.focusObjectList.scope[findFocusObject] = groupInfo
+                }
+                // 取代選取陣列中的物件 end
+            }
+            newAlarm = null
+            oldAlarm = null
+        } else {
+            var tempPointID = Math.random().toString(36).substr(2)
+            oldData.push({
+                data: data[x],
+                pixi: pixiaddScope(data[x], 'scope', tempPointID),
+                tempPointID
+            })
+        }
+        scopefindIndex = null
+    }
+    state.pixiscope = oldData
+    len = null
+    oldData = null
+    oldDataLen = null
+}
+const pixiaddScope = (data, name, tempPointID) => {
+    if (state.revisionObject.length > 0) {
+        for (var z = 0; z < state.revisionObject.length; z++) {
+            state.revisionObject[z].remove()
+        }
+        state.revisionObject = []
+    }
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var group = L.layerGroup([], { type: 'scope', id: `scope${data.number}`, data }).addTo(map);
+    var bounds = [
+        [data.position_point_B.y * height, data.position_point_B.x * width],
+        [data.position_point_A.y * height, data.position_point_A.x * width]
+    ];
+    var opacity = props.mainMode === 'mask' ? 0.3 : 1
+    // 物件新增
+    var tempNumPointDiv = L.divIcon({ html: `<div class="temperature-bar-main"><div class="temperature-bar-bubble"><div class="temperature-bar-bubble-number" id="temperature-bar-bubble-number-${tempPointID}">0</div></div><div class="temperature-bar-canvas"><div class="temperature-bar" id="temperature-bar-${tempPointID}"></div></div></div>` });
+    var tempNumPoint = L.marker([data.position_point_B.y * height, data.position_point_B.x * width], { icon: tempNumPointDiv, draggable: false, opacity, id: `scope${data.number}` }).addTo(group);
+    var myIcon = L.divIcon({ html: `<div class="spot-div-number"><span>${data.number}</span></div>` });
+    var marker = L.marker([data.position_point_B.y * height, data.position_point_B.x * width], { icon: myIcon, objectType: 'icon', opacity, draggable: false, id: `scope${data.number}` }).addTo(group);
+    var rectangleBorder1 = L.rectangle(bounds, { color: "#000", weight: 3, fill: false, objectType: 'rectangle', id: `scope${data.number}` }).addTo(group);
+    var rectangleBorder2 = L.rectangle(bounds, { color: "#fff", weight: 2, fill: false, objectType: 'rectangle', id: `scope${data.number}` }).addTo(group);
+    var rectangular = L.rectangle(bounds, { color: "#fff00", weight: 2, fillOpacity: 0, objectType: 'rectangle', id: `scope${data.number}` }).addTo(group);
+    // 物件新增 END
+    rectangular.on('dblclick', (e) => {
+        // var northEast = e.target.getBounds()._northEast
+        // northEast.lat = -northEast.lat * 0.8
+        // northEast.lng = northEast.lng * 0.8
+        // e.target.getBounds()._northEast = northEast
+        // var southWest = e.target.getBounds()._southWest
+        // southWest.lat = -southWest.lat * 0.8
+        // southWest.lng = southWest.lng * 0.8
+        // e.target.getBounds()._southWest = southWest
+        // state.map.fitBounds(e.target.getBounds())
+    })
+    var tmepBounds = []
+    var tempmarker = {}
+    var moveStatus = false
+    const updatePoint = (temp, item) => {
+        var newLocation = [
+            [temp[0][1].lat, temp[0][1].lng],
+            [temp[0][3].lat, temp[0][3].lng]
+        ]
+        updateRevisionObjectNew(newLocation, item)
+    }
+    const runResize = (e) => {
+        var resizePoint = createRevisionObjectNew(e)
+        var anchors = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+        var temp1 = JSON.stringify(tmepBounds)
+        var temp = JSON.parse(temp1)
+        anchors.forEach((item, index) => {
+            if (item === 'top-left') {
+                resizePoint[index].on('drag', (e) => {
+                    temp[0][1] = e.target.getLatLng()
+                    temp[0][2].lat = e.target.getLatLng().lat
+                    temp[0][0].lng = e.target.getLatLng().lng
+                    marker.setLatLng(e.target.getLatLng())
+                    tempNumPoint.setLatLng(e.target.getLatLng())
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+                // outputNewLoction(getBounds)
+            } else if (item === 'top') {
+                var sx = resizePoint[index].getLatLng()
+                resizePoint[index].on('dragstart', (e) => {
+                    e.target.setLatLng([e.target.getLatLng().lat, sx.lng])
+                })
+                resizePoint[index].on('drag', (e) => {
+                    e.target.setLatLng([e.target.getLatLng().lat, sx.lng])
+                    temp[0][1].lat = e.target.getLatLng().lat
+                    temp[0][2].lat = e.target.getLatLng().lat
+                    marker.setLatLng(temp[0][1])
+                    tempNumPoint.setLatLng(temp[0][1])
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+            } else if (item === 'top-right') {
+                resizePoint[index].on('drag', (e) => {
+                    temp[0][2] = e.target.getLatLng()
+                    temp[0][1].lat = e.target.getLatLng().lat
+                    temp[0][3].lng = e.target.getLatLng().lng
+                    marker.setLatLng(temp[0][1])
+                    tempNumPoint.setLatLng(temp[0][1])
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+            } else if (item === 'left') {
+                var sx = resizePoint[index].getLatLng()
+                resizePoint[index].on('dragstart', (e) => {
+                    e.target.setLatLng([sx.lat, e.target.getLatLng().lng])
+                })
+                resizePoint[index].on('drag', (e) => {
+                    e.target.setLatLng([sx.lat, e.target.getLatLng().lng])
+                    temp[0][0].lng = e.target.getLatLng().lng
+                    temp[0][1].lng = e.target.getLatLng().lng
+                    marker.setLatLng(temp[0][1])
+                    tempNumPoint.setLatLng(temp[0][1])
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+            } else if (item === 'right') {
+                var sx = resizePoint[index].getLatLng()
+                resizePoint[index].on('dragstart', (e) => {
+                    e.target.setLatLng([sx.lat, e.target.getLatLng().lng])
+                })
+                resizePoint[index].on('drag', (e) => {
+                    e.target.setLatLng([sx.lat, e.target.getLatLng().lng])
+                    temp[0][2].lng = e.target.getLatLng().lng
+                    temp[0][3].lng = e.target.getLatLng().lng
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+            } else if (item === 'bottom-left') {
+                resizePoint[index].on('drag', (e) => {
+                    temp[0][0] = e.target.getLatLng()
+                    temp[0][3].lat = e.target.getLatLng().lat
+                    temp[0][1].lng = e.target.getLatLng().lng
+                    marker.setLatLng(temp[0][1])
+                    tempNumPoint.setLatLng(temp[0][1])
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+                // outputNewLoction(getBounds)
+            } else if (item === 'bottom') {
+                var sx = resizePoint[index].getLatLng()
+                resizePoint[index].on('dragstart', (e) => {
+                    e.target.setLatLng([e.target.getLatLng().lat, sx.lng])
+                })
+                resizePoint[index].on('drag', (e) => {
+                    e.target.setLatLng([e.target.getLatLng().lat, sx.lng])
+                    temp[0][0].lat = e.target.getLatLng().lat
+                    temp[0][3].lat = e.target.getLatLng().lat
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+            } else if (item === 'bottom-right') {
+                resizePoint[index].on('drag', (e) => {
+                    temp[0][3] = e.target.getLatLng()
+                    temp[0][0].lat = e.target.getLatLng().lat
+                    temp[0][2].lng = e.target.getLatLng().lng
+                    marker.setLatLng(temp[0][1])
+                    tempNumPoint.setLatLng(temp[0][1])
+                    rectangleBorder1.setLatLngs(temp)
+                    rectangleBorder2.setLatLngs(temp)
+                    rectangular.setLatLngs(temp)
+                    updatePoint(temp, item)
+                })
+                // outputNewLoction(getBounds)
+            }
+            resizePoint[index].on('dragend', (e) => {
+                outputNewLoction(temp)
+            })
+        })
+    }
+    const outputNewLoction = (getBounds) => {
+        // var getBounds = e.target.getLatLngs()
+        var newLocation = [
+            [getBounds[0][1].lat, getBounds[0][1].lng],
+            [getBounds[0][3].lat, getBounds[0][3].lng]
+        ]
+        moveStatus = false
+        state.dragObjectStatus = true
+        pushScope(newLocation, data)
+        // runResize(newLocation)
+    }
+    // rectangular.on('click', e => runResize(bounds))
+    rectangular.on('mousedown', (e) => {
+        if (props.mainMode === 'roi') {
+            // console.log('mdow roi');
+            // state.createRevisionObject(data, 'scope', undefined, group)
+            state.tempMouseDownScopelnglat = e.latlng
+            tmepBounds = e.target.getLatLngs()
+            tempmarker = marker.getLatLng()
+            moveStatus = true
+            state.dragObjectStatus = false
+            var newLocation = [
+                [tmepBounds[0][1].lat, tmepBounds[0][1].lng],
+                [tmepBounds[0][3].lat, tmepBounds[0][3].lng]
+            ]
+            runResize(newLocation)
+
+            if (!state.keyctrl) {
+                state.focusObjectList = {
+                    spot: [],
+                    line: [],
+                    scope: [],
+                    blob: []
+                }
+            }
+            // 把物件新增到選框暫存中
+            var options = e.target.options
+            var find = state.focusObjectList.scope.findIndex((findItem) => findItem.options.id === options.id)
+            if (find === -1) {
+                state.focusObjectList.scope.push(group)
+                // state.focusObjectList.push(e.target)
+            } else {
+                // 移除
+                if (state.keyctrl) {
+                    state.focusObjectList.scope = state.focusObjectList.scope.filter(filterItem => filterItem.options.id !== options.id)
+                }
+            }
+        }
+    })
+    // rectangular.on('mousemove', (e) => {
+    //     if (moveStatus) {
+    //         var y = state.tempMouseDownScopelnglat.lat - e.latlng.lat
+    //         var x = state.tempMouseDownScopelnglat.lng - e.latlng.lng
+    //         var temp1 = JSON.stringify(tmepBounds)
+    //         var temp = JSON.parse(temp1)
+    //         for (var i = 0; i < tmepBounds[0].length; i++) {
+    //             temp[0][i].lat = tmepBounds[0][i].lat - y
+    //             temp[0][i].lng = tmepBounds[0][i].lng - x
+    //         }
+    //         var temp2 = JSON.stringify(tempmarker)
+    //         var temp3 = JSON.parse(temp2)
+    //         var markerNew = [
+    //             temp3.lat - y,
+    //             temp3.lng - x
+    //         ]
+    //         marker.setLatLng(markerNew)
+    //         tempNumPoint.setLatLng(markerNew)
+    //         e.target.setLatLngs(temp)
+    //         rectangleBorder1.setLatLngs(temp)
+    //         rectangleBorder2.setLatLngs(temp)
+    //         // state.createRevisionObject(data, 'scope', temp, group)
+    //         // var newLocation = [
+    //         //     [temp[0][1].lat, temp[0][1].lng],
+    //         //     [temp[0][3].lat, temp[0][3].lng]
+    //         // ]s
+    //         if (state.revisionObject.length > 0) {
+    //             for (var z = 0; z < state.revisionObject.length; z++) {
+    //                 state.revisionObject[z].remove()
+    //             }
+    //             state.revisionObject = []
+    //         }
+    //     }
+    // })
+    rectangular.on('mouseup', (e) => {
+        if (props.mainMode === 'roi') {
+            // var getBounds = e.target.getLatLngs()
+            // outputNewLoction(getBounds)
+        }
+        // state.createRevisionObject(data, 'scope', getBounds, group)
+    })
+    rectangular.on('mouseout', (e) => {
+        // if (!state.revisionObjectleave) {
+        // var getBounds = e.target.getLatLngs()
+        // var newLocation = [
+        //     [getBounds[0][1].lat, getBounds[0][1].lng],
+        //     [getBounds[0][3].lat, getBounds[0][3].lng]
+        // ]
+        // state.pushScope(newLocation, data)
+        moveStatus = false
+        state.dragObjectStatus = true
+        // }
+    })
+    return group
+}
+const pushScope = (location, data) => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var scopePositionLT = {
+        y: location[1][0] / height,
+        x: location[1][1] / width,
+    }
+    var scopePositionBR = {
+        y: location[0][0] / height,
+        x: location[0][1] / width,
+    }
+    var InputScopeData = {
+        type: 'ROI',
+        method: 'modify',
+        session: Math.random().toString(36).substr(2),
+        content: {
+            RoiType: 'scope',
+            id: data.number,
+            alarm_status: data.alarm_status,
+            threshold: data.threshold,
+            group_name: '',
+            group_id: '',
+            points: {
+                A: {
+                    x: [parseFloat(scopePositionLT.x)],
+                    y: [parseFloat(scopePositionLT.y)]
+                },
+                B: {
+                    x: [parseFloat(scopePositionBR.x)],
+                    y: [parseFloat(scopePositionBR.y)]
+                }
+            }
+        }
+    }
+    // state.pixiscope[state.tempSetScopenumber].data.position_point_A = scopePositionLT
+    // state.pixiscope[state.tempSetScopenumber].data.position_point_B = scopePositionBR
+    // state.$emit('maskloing', true)
+    state.ws3.send(JSON.stringify(InputScopeData))
+    // state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'SCOPE 已更新', type: 0, timeout: 1 } });
+    // // state.intiRevisionScopeData = null
+    // state.tempScopePosition = {
+    //     x: 0,
+    //     y: 0,
+    //     width: 0,
+    //     height: 0
+    // }
+    // scopePositionLT = null
+    // scopePositionBR = null
+    // InputScopeData = null
+    // canvas = null
+    // state.dragObjectStatus = true
+}
+const updateRevisionObjectNew = (moveLocation, moveType) => {
+    var x = moveLocation[0][1]
+    var y = moveLocation[0][0]
+    var width = moveLocation[1][1] - moveLocation[0][1]
+    var height = moveLocation[1][0] - moveLocation[0][0]
+    // var width = moveLocation[1][1] - moveLocation[0][1]
+    // var height = moveLocation[1][0] - moveLocation[0][0]
+    const randerings = (moveName, type) => {
+        var anchors = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+        anchors.forEach((item, index) => {
+            var tempX = 0
+            var tempY = 0
+            if (item === 'top-left') {
+                tempX = x
+                tempY = y
+            } else if (item === 'top') {
+                //         rect.cursor = 'n-resize';
+                tempX = x + (width / 2)
+                tempY = y
+            } else if (item === 'top-right') {
+                //         rect.cursor = 'ne-resize';
+                tempX = width + x
+                tempY = y
+            } else if (item === 'left') {
+                //         rect.cursor = 'w-resize';
+                tempX = x
+                tempY = y + (height / 2)
+            } else if (item === 'right') {
+                //         rect.cursor = 'w-resize';
+                tempX = x + width
+                tempY = y + (height / 2)
+            } else if (item === 'bottom-left') {
+                //         rect.cursor = 'ne-resize';
+                tempX = x
+                tempY = y + height
+            } else if (item === 'bottom') {
+                //         rect.cursor = 'n-resize';
+                tempX = x + (width / 2)
+                tempY = y + height
+            } else if (item === 'bottom-right') {
+                //         rect.cursor = 'nw-resize';
+                tempX = width + x
+                tempY = height + y
+            }
+            if (moveType !== item) {
+                state.revisionObject[index].setLatLng([tempY, tempX])
+            }
+            // var myIcon = L.divIcon({ html: `<div class="RevisionObject"></div>` });
+            // var rect = L.marker([tempY, tempX], { icon: myIcon, draggable: true }).addTo(state.map);
+            // outarr.push(rect)
+        })
+    }
+    randerings()
+}
+const createRevisionObjectNew = (moveLocation) => {
+    if (state.revisionObject.length > 0) {
+        for (var z = 0; z < state.revisionObject.length; z++) {
+            state.revisionObject[z].remove()
+        }
+        state.revisionObject = []
+    }
+    var x = moveLocation[0][1]
+    var y = moveLocation[0][0]
+    var width = moveLocation[1][1] - moveLocation[0][1]
+    var height = moveLocation[1][0] - moveLocation[0][0]
+    const randerings = (moveName, type) => {
+        var anchors = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+        var outarr = []
+        anchors.forEach((item, index) => {
+            var tempX = 0
+            var tempY = 0
+            var rect = null
+            if (item === 'top-left') {
+                tempX = x
+                tempY = y
+            } else if (item === 'top') {
+                //         rect.cursor = 'n-resize';
+                tempX = x + (width / 2)
+                tempY = y
+            } else if (item === 'top-right') {
+                //         rect.cursor = 'ne-resize';
+                tempX = width + x
+                tempY = y
+            } else if (item === 'left') {
+                //         rect.cursor = 'w-resize';
+                tempX = x
+                tempY = y + (height / 2)
+            } else if (item === 'right') {
+                //         rect.cursor = 'w-resize';
+                tempX = x + width
+                tempY = y + (height / 2)
+            } else if (item === 'bottom-left') {
+                //         rect.cursor = 'ne-resize';
+                tempX = x
+                tempY = y + height
+            } else if (item === 'bottom') {
+                //         rect.cursor = 'n-resize';
+                tempX = x + (width / 2)
+                tempY = y + height
+            } else if (item === 'bottom-right') {
+                //         rect.cursor = 'nw-resize';
+                tempX = width + x
+                tempY = height + y
+            }
+            var myIcon = L.divIcon({ html: `<div class="RevisionObject cur-${item}"></div>` });
+            var rect = L.marker([tempY, tempX], { icon: myIcon, draggable: true }).addTo(map);
+            outarr.push(rect)
+        })
+        state.revisionObject = outarr
+        return outarr
+    }
+    return randerings()
+}
+const createRevisionObject = (e, objcetName, moveLocation1, group) => {
+    var deflatwidth = state.imgWidth
+    var deflatheight = state.imgHeight
+    if (objcetName === 'scope') {
+        // var canvas = document.getElementById(state.canvasId)
+        // // 先清除暫存
+        if (state.revisionObject.length > 0) {
+            for (var z = 0; z < state.revisionObject.length; z++) {
+                state.revisionObject[z].remove()
+            }
+            state.revisionObject = []
+        }
+        var object = e
+        var x = 0
+        var y = 0
+        var width = 0
+        var height = 0
+        const getLatLng1 = (moveLocation2) => {
+            var moveLocation = moveLocation2 === undefined ? moveLocation1 : moveLocation2
+            if (moveLocation !== undefined) {
+                var newLocation = [
+                    [moveLocation[0][1].lat, moveLocation[0][1].lng],
+                    [moveLocation[0][3].lat, moveLocation[0][3].lng]
+                ]
+                x = newLocation[0][1]
+                y = newLocation[0][0]
+                width = newLocation[1][1] - newLocation[0][1]
+                height = newLocation[1][0] - newLocation[0][0]
+            } else {
+                x = object.position_point_B.x * deflatwidth
+                y = object.position_point_B.y * deflatheight
+                width = object.position_point_A.x * deflatwidth - object.position_point_B.x * deflatwidth
+                height = object.position_point_A.y * deflatheight - object.position_point_B.y * deflatheight
+            }
+        }
+        getLatLng1()
+        const eventRun = (rect, type) => {
+            var temp00002 = null
+            rect.on('dragstart', () => {
+                state.revisionObjectleave = true
+                state.dragObjectStatus = false
+            })
+            rect.on('dragend', () => {
+                state.revisionObjectleave = false
+                state.dragObjectStatus = true
+                if (temp00002 !== null) {
+                    var newLocation = [
+                        [temp00002[1].lat, temp00002[1].lng],
+                        [temp00002[3].lat, temp00002[3].lng]
+                    ]
+                    pushScope(newLocation, e)
+                }
+            })
+            rect.on('drag', (e1) => {
+                group.eachLayer((layer) => {
+                    if (layer.options.objectType === 'rectangle') {
+                        var temp00001 = JSON.stringify(layer.getLatLngs()[0])
+                        temp00002 = JSON.parse(temp00001)
+                        temp00002[1].lat = e1.latlng.lat
+                        temp00002[1].lng = e1.latlng.lng
+                        temp00002[2].lat = e1.latlng.lat
+                        temp00002[0].lng = e1.latlng.lng
+                        layer.setLatLngs(temp00002)
+                    }
+                });
+                getLatLng1([temp00002])
+                randerings(type)
+                // state.revisionTransformerStart(e1, 'top-left', e, group)
+            });
+        }
+        const randerings = (moveName, type) => {
+            var anchors = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+            var outarr = []
+
+            anchors.forEach((item, index) => {
+                var myIcon = L.divIcon({ html: `<div class="RevisionObject"></div>` });
+                var tempX = 0
+                var tempY = 0
+                // var rect = new PIXI.Graphics();
+                var rect = null
+                if (item === 'top-left' && moveName !== 'top-left') {
+                    tempX = x
+                    tempY = y
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon, draggable: true }).addTo(map);
+                        eventRun(rect, item)
+                    } else {
+                        var rect = state.revisionObject[index]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'top' && moveName !== 'top') {
+                    //         rect.cursor = 'n-resize';
+                    tempX = x + (width / 2)
+                    tempY = y
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                    // rect.on('mousedown', (e1) => {
+                    //     state.revisionTransformerStart(e1, 'top', e, group)
+                    // });
+                } else if (item === 'top-right' && moveName !== 'top-right') {
+                    //         rect.cursor = 'ne-resize';
+                    tempX = width + x
+                    tempY = y
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'top-right', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'left' && moveName !== 'left') {
+                    //         rect.cursor = 'w-resize';
+                    tempX = x
+                    tempY = y + (height / 2)
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'left', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'right' && moveName !== 'right') {
+                    //         rect.cursor = 'w-resize';
+                    tempX = x + width
+                    tempY = y + (height / 2)
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'right', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'bottom-left' && moveName !== 'bottom-left') {
+                    //         rect.cursor = 'ne-resize';
+                    tempX = x
+                    tempY = y + height
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'bottom-left', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'bottom' && moveName !== 'bottom') {
+                    //         rect.cursor = 'n-resize';
+                    tempX = x + (width / 2)
+                    tempY = y + height
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'bottom', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                } else if (item === 'bottom-right' && moveName !== 'bottom-right') {
+                    //         rect.cursor = 'nw-resize';
+                    tempX = width + x
+                    tempY = height + y
+                    if (moveName === undefined) {
+                        var rect = L.marker([tempY, tempX], { icon: myIcon }).addTo(map);
+                        rect.on('mousedown', (e1) => {
+                            revisionTransformerStart(e1, 'bottom-right', e, group)
+                        });
+                    } else {
+                        var rect = state.revisionObject[index - 1]
+                        rect.setLatLng([tempY, tempX])
+                    }
+                }
+                // rect.on('mouseover', () => state.revisionObjectleave = true)
+                // rect.on('mouseout', () => state.revisionObjectleave = false)
+                if (moveName === undefined) {
+                    outarr.push(rect)
+                }
+            })
+            if (moveName === undefined) {
+                state.revisionObject = outarr
+            }
+        }
+        randerings()
+        // object = null
+        // x = null
+        // y = null
+        // width = null
+        // height = null
+        // anchors = null
+        // anchorslen = null
+        // canvas = null
+    }
+}
+const revisionTransformerStart = (e, type, roidata, group) => {
+    var defaultWidth = state.imgWidth
+    var defaultHeight = state.imgHeight
+    var ObjectX = 0
+    var ObjectY = 0
+    var width = 0
+    var height = 0
+    if (state.intiRevisionScopeData === null) {
+        var num = state.pixiscope.findIndex((item) => item.data.number === roidata.number)
+        var newObject = state.pixiscope[num].data
+        ObjectX = newObject.position_point_B.x * defaultWidth
+        ObjectY = newObject.position_point_B.y * defaultHeight
+        width = newObject.position_point_A.x * defaultWidth
+        height = newObject.position_point_A.y * defaultHeight
+    } else {
+        ObjectX = state.intiRevisionScopeData.x
+        ObjectY = state.intiRevisionScopeData.y
+        width = state.intiRevisionScopeData.width
+        height = state.intiRevisionScopeData.height
+    }
+    const updateScope = (newPosition) => {
+        var tempLocation = [
+            [newPosition.height, newPosition.x],
+            [newPosition.y, newPosition.x],
+            [newPosition.y, newPosition.width],
+            [newPosition.height, newPosition.width],
+        ]
+        group.eachLayer((layer) => {
+            if (layer.options.objectType === 'rectangle') {
+                layer.setLatLngs(tempLocation)
+            }
+        });
+    }
+    const revisionTransformerMove = (event) => {
+        // state.dragObjectStatus = false
+        var x1 = state.mousesaveLocation.x - event.latlng.lng
+        var y1 = state.mousesaveLocation.y - event.latlng.lat
+        var newPosition = {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0
+        }
+        var positions = {
+            'top-left': { x: ObjectX - x1, y: ObjectY - y1, width: width, height: height },
+            // 'top-left': { x: ObjectX - x1, y: ObjectY - y1, width: width - -x1, height: height - -y1 },
+            'top': { x: ObjectX, y: ObjectY - y1, width, height: height },
+            // 'top': { x: ObjectX, y: ObjectY - y1, width, height: height - -y1 },
+            'top-right': { x: ObjectX, y: ObjectY - y1, width: width - x1, height: height - -y1 },
+            // 'top-right': { x: ObjectX, y: ObjectY - y1, width: width - x1, height: height - -y1 },
+            'left': { x: ObjectX - x1, y: ObjectY, width: width - -x1, height },
+            'right': { x: ObjectX, y: ObjectY, width: width - x1, height },
+            'bottom-left': { x: ObjectX - x1, y: ObjectY, width: width - -x1, height: height - y1 },
+            'bottom': { x: ObjectX, y: ObjectY, width, height: height - y1 },
+            'bottom-right': { x: ObjectX, y: ObjectY, width: width - x1, height: height - y1 },
+            // 'all': { x: ObjectX - x1, y: ObjectY - y1, width, height }
+        };
+        newPosition = positions[type];
+        updateScope(newPosition)
+        //     // 限制調整範圍
+        //     var limitX = 8;
+        //     var limitY = 8;
+
+        //     if (type !== 'all') {
+        //         newPosition.width = newPosition.width < limitX ? limitX : newPosition.width;
+        //         newPosition.x = newPosition.x > width + ObjectX - limitX ? width + ObjectX - limitX : newPosition.x;
+        //         newPosition.height = newPosition.height < limitY ? limitY : newPosition.height;
+        //         newPosition.y = newPosition.y > height + ObjectY - limitY ? height + ObjectY - limitY : newPosition.y;
+        //     }
+        //     state.tempScopePosition = newPosition
+        // state.pixiUpdateScope(state.dragTarget2, newPosition) // 更新scope
+        //     // state.ChangeRevisionbject(newPosition) // 更新調整框
+        //     state.intiRevisionScopeData = newPosition
+        //     newPosition = null
+        //     x1 = null
+        //     y1 = null
+        //     positions = null
+        //     limitX = null
+        //     limitY = null
+    }
+    // state.saveFouceTempRevision = e.target
+    // state.mousesaveLocation = {
+    //     x: e.global.x,
+    //     y: e.global.y
+    // }
+    // state.dragTargettemp = {
+    //     x: e.target.position.x,
+    //     y: e.target.position.y
+    // }
+    state.saveonDragStart = revisionTransformerMove(e) // 讓使用的函數暫存，後續刪除監聽
+    map.on('mousemove', (e1) => {
+        revisionTransformerMove(e1)
+    });
+    // e.target.on('mousemove', (e1) => {
+    //     revisionTransformerMove(e1)
+    // });
+    // e.target.on('mouseout', (e1) => {
+    //     e.target.off()
+    // });
+}
+const runBlob = (data, objectName) => {
+    // console.log('run blob ', data);
+    var oldData = objectName === 'blob' ? state.pixiblob : state.pixiMask
+    var oldDataLen = objectName === 'blob' ? state.pixiblob.length : state.pixiMask.length
+    var newDataLen = data.length
+    var pixiBlob = objectName === 'blob' ? state.pixiJsRoiBlobData : state.pixiJsRoiMaskData
+    // 以下判斷ROI 是否遭到刪除
+    try {
+        for (var z = 0; z < oldDataLen; z++) {
+            var selectRoi1 = data.find((item) => JSON.stringify(item.number) === JSON.stringify(oldData[z].number))
+            if (selectRoi1 === undefined) {
+                var pixiBlobfind = pixiBlob.findIndex((item) => item.info.number === oldData[z].number)
+                var pixilen = pixiBlob[pixiBlobfind].pixi.length
+                var pixibglen = pixiBlob[pixiBlobfind].pixibg.length
+                var markerlen = pixiBlob[pixiBlobfind].marker.length
+                for (var o = 0; o < pixilen; o++) {
+                    pixiBlob[pixiBlobfind].pixi[o].remove()
+                }
+                for (var as1 = 0; as1 < markerlen; as1++) {
+                    pixiBlob[pixiBlobfind].marker[as1].remove()
+                }
+                for (var as2 = 0; as2 < pixibglen; as2++) {
+                    // pixiBlob[pixiBlobfind].pixibg[as2].destroy()
+                }
+                // pixiBlob[pixiBlobfind].pixi = []
+                pixiBlob = pixiBlob.filter(obj => obj.info.number !== oldData[z].number);
+                pixiBlobfind = null
+                pixilen = null
+                markerlen = null
+                pixibglen = null
+            }
+            selectRoi1 = null
+        }
+    } catch (error) {
+        console.log('判斷ROI 是否遭到刪除', error);
+    }
+    // 判斷
+    for (var i = 0; i < newDataLen; i++) {
+        data[i].temperature_max = roundDown(data[i].temperature_max, 1)
+        var selectRoi = oldData.find((item) => JSON.stringify(item.number) === JSON.stringify(data[i].number))
+        if (selectRoi !== undefined) {
+            if (JSON.stringify(selectRoi.points) === JSON.stringify(data[i].points)
+                && selectRoi.alarmStatus === data[i].alarmStatus
+                && selectRoi.approval === data[i].approval
+                && selectRoi.group_name === data[i].group_name
+                && selectRoi.group_id === data[i].group_id
+            ) {
+                var pixiBlobfind12 = pixiBlob.findIndex((item) => JSON.stringify(item.info.number) === JSON.stringify(data[i].number))
+                pixiBlob[pixiBlobfind12].info = data[i]
+                pixiBlobfind12 = null
+            } else {
+                var olddata = pixiBlob.find((item) => JSON.stringify(item.info.number) === JSON.stringify(data[i].number))
+                var oldpixilen = olddata.pixi.length
+                for (var deletepixi = 0; deletepixi < oldpixilen; deletepixi++) {
+                    olddata.pixi[deletepixi].remove()
+                    // olddata.pixibg[deletepixi].destroy()
+                    olddata.marker[deletepixi].remove()
+                }
+                var newpodata = []
+                var newpodatabg1 = []
+                var newmarkerdata = []
+                // var tempPointID = Math.random().toString(36).substr(2)
+                // newpodatabg1.push(state.ObjectChangedbg([data[i].spline, data[i].alarmStatus])) // 20230731 add spline bg
+                newpodata.push(ObjectChanged([data[i].spline, data[i].alarmStatus], true, data[i], objectName))
+                var pixiBlobfind1 = pixiBlob.findIndex((item) => JSON.stringify(item.info.number) === JSON.stringify(data[i].number))
+                newmarkerdata.push(markerPointObjcet(data[i].markerPoint, data[i].number, data[i].alarmStatus, data[i], objectName, pixiBlob[pixiBlobfind1].tempPointID))
+                pixiBlob[pixiBlobfind1].info = data[i]
+                pixiBlob[pixiBlobfind1].pixi = newpodata
+                pixiBlob[pixiBlobfind1].pixibg = newpodatabg1
+                pixiBlob[pixiBlobfind1].marker = newmarkerdata
+                olddata = null
+                oldpixilen = null
+                newpodata = null
+                newpodatabg1 = null
+                newmarkerdata = null
+                pixiBlobfind1 = null
+            }
+        } else {
+            var points = []
+            var newpodatabg = []
+            var marker = []
+            var tempPointID = Math.random().toString(36).substr(2)
+            // newpodatabg.push(state.ObjectChangedbg([data[i].spline, data[i].alarmStatus])) // 20230731 add spline bg
+            points.push(ObjectChanged([data[i].spline, data[i].alarmStatus], true, data[i], objectName))
+            marker.push(markerPointObjcet(data[i].markerPoint, data[i].number, data[i].alarmStatus, data[i], objectName, tempPointID))
+            pixiBlob.push({
+                info: data[i],
+                pixi: points,
+                pixibg: newpodatabg,
+                marker,
+                tempPointID
+            })
+            points = null
+            marker = null
+            newpodatabg = null
+        }
+        selectRoi = null
+    }
+    if (objectName === "blob") {
+        state.pixiJsRoiBlobData = pixiBlob
+        state.pixiblob = data
+    } else if (objectName === "mask") {
+        state.pixiJsRoiMaskData = pixiBlob
+        state.pixiMask = data
+    }
+    oldData = null
+    oldDataLen = null
+    newDataLen = null
+    pixiBlob = null
+}
+const ObjectChanged = (data, type, roidata, objectName) => {// 渲染BLOB 物件 
+    var spline1 = L.layerGroup([], {
+        type: objectName === 'mask' ? 'mask' : 'blob',
+        id: `blob${roidata.number}`
+    }).addTo(map);
+    var latlngs = data[0];
+    var color = ['255 255 255', '255 232 27', '255 0 0', '255 107 0']
+    // console.log('run blob', roidata);
+    var roiAlarmStatus = roidata.approval // 0 = normal ; 1 = level 1 ; 2 = level 2 ; 3 = auto
+    // if (approval === 1) {
+    //     roiAlarmStatus = 3
+    // } else if (approval === 0 && roidata.temperature_max >= roidata.temperature_point.median.start && roidata.temperature_max < roidata.temperature_point.median.end) {
+    //     roiAlarmStatus = 1
+    // } else if (approval === 0 && roidata.temperature_max >= roidata.temperature_point.median.start && roidata.temperature_max >= roidata.temperature_point.median.end) {
+    //     roiAlarmStatus = 2
+    // }
+    // console.log('blob alarm', roiAlarmStatus, roidata.temperature_max, roidata.temperature_point.median.start, roidata.temperature_point.median.end);
+
+    // var gradient = {
+    //     0: 'red',
+    //     0.5: 'yellow',
+    //     1: 'green'
+    // };
+    if (state.blobPutTempPoint.length > 0) {
+        for (var z = 0; z < state.blobPutTempPoint.length; z++) {
+            state.blobPutTempPoint[z].remove()
+        }
+        state.blobPutTempPoint = []
+    }
+    var blob = L.polygon(latlngs, {
+        color: `rgb(${color[roiAlarmStatus]} / 50%)`,
+        data: roidata,
+        fill: objectName === 'mask' && props.mainMode !== 'mask' ? false : 'depends',
+        objectType: objectName === 'mask' ? 'mask' : 'blob'
+    }).addTo(spline1);
+    // fillRule: 'nonzero'
+    // var blob = L.polygon(latlngs, { data: roidata }).addTo(spline1);
+    // var addPoint = null
+    // var testLine = null
+    blob.on('dblclick', e => map.fitBounds(e.target.getBounds()))
+    // blob.on('click', (e) => {
+    //     if (props.mainMode !== 'review') {
+    //         createBlobEditPoint(e.target)
+    //     }
+    // })
+    blob.on('mousedown', (e) => {
+        // 把物件新增到選框暫存中
+        if (props.mainMode !== 'review') {
+            createBlobEditPoint(e.target)
+        }
+        var options = e.target.options
+        if (!state.keyctrl) {
+            state.focusObjectList = {
+                spot: [],
+                line: [],
+                scope: [],
+                blob: []
+            }
+        }
+        var find = state.focusObjectList.blob.findIndex((findItem) => findItem.options.id === options.id)
+        if (find === -1) {
+            state.focusObjectList.blob.push(spline1)
+            // console.log('add blob to focus list');
+            // state.focusObjectList.push(e.target)
+        } else {
+            // 移除
+            if (state.keyctrl) {
+                state.focusObjectList.blob = state.focusObjectList.blob.filter(filterItem => filterItem.options.id !== options.id)
+            }
+        }
+    })
+    blob.on('mouseover', (e) => {
+        e.target.setStyle({
+            color: `rgb(${color[roiAlarmStatus]} / 70%)`
+        })
+        if (state.addPoint !== null) {
+            state.addPoint.remove()
+            state.addPoint = null
+        }
+        if (state.testLine !== null) {
+            state.testLine.remove()
+            state.testLine = null
+        }
+
+        var myIcon = L.divIcon({ html: `<div class="blob-div-addpoint"></div>` });
+        state.addPoint = L.marker([0, 0], { icon: myIcon }).addTo(map);
+        state.testLine = L.polyline([[0, 0], [1, 1]], { color: '#858585', interactive: false }).addTo(map);
+    })
+    blob.on('mousemove', (e) => {
+        var latlng = e.latlng;
+        var path = blob.getLatLngs();
+        var closestPoint = L.GeometryUtil.closest(map, path, latlng);
+        var latlngs = [
+            [latlng.lat, latlng.lng],
+            [closestPoint.lat, closestPoint.lng],
+        ];
+        state.addPoint.setLatLng(closestPoint)
+        state.testLine.setLatLngs(latlngs)
+        // console.log(testLine.getLatLngs());
+
+    })
+    blob.on('mouseout', (e) => {
+        e.target.setStyle({
+            color: `rgb(${color[roiAlarmStatus]} / 50%)`
+        })
+        if (state.addPoint !== null) {
+            state.addPoint.remove()
+            state.addPoint = null
+        }
+        if (state.testLine !== null) {
+            state.testLine.remove()
+            state.testLine = null
+        }
+    })
+    return spline1
+}
+const markerPointObjcet = (data, number, alarm, roidata, objectName, tempPointID) => { // 渲染BLOB編號 物件
+    // console.log(tempPointID);
+    var opacity = props.mainMode === 'mask' && objectName !== 'mask' ? 0.3 : 1
+    var group = L.layerGroup().addTo(map);
+    var myIcon = L.divIcon({ html: `<div class="spot-div-number"><span>${number}</span></div>` });
+    if (objectName !== 'mask') {
+        var tempNumPointDiv = L.divIcon({ html: `<div class="temperature-bar-main"><div class="temperature-bar-bubble"><div class="temperature-bar-bubble-number" id="temperature-bar-bubble-number-${tempPointID}">0</div></div><div class="temperature-bar-canvas"><div class="temperature-bar" id="temperature-bar-${tempPointID}"></div></div></div>` });
+        L.marker([data[0].x, data[0].y], { icon: tempNumPointDiv, draggable: false, opacity }).addTo(group); // var tempNumPoint =
+    }
+    L.marker([data[0].x, data[0].y], { icon: myIcon, opacity }).addTo(group);
+    return group
+}
+const ObjectChangedbg = (data) => {
+    var spline1 = new PIXI.Graphics();
+    state.appPixi.stage.addChild(spline1);
+    spline1.lineStyle(2, "#101C2D", 0.8);
+    spline1.beginFill("#00000000", 0.001)
+    spline1.name = 'blob'
+    var polygon0 = new PIXI.Polygon(Array.from(data));
+    // { fillRule: 'nonzero' }
+    spline1.drawShape(polygon0);
+    spline1.closePath();
+    spline1.endFill();
+    polygon0 = null
+    return spline1
+}
+const createBlobEditPoint = (data) => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var point = data.options.data.points[0]
+    if (state.blobPutTempPoint.length > 0) {
+        for (var z = 0; z < state.blobPutTempPoint.length; z++) {
+            state.blobPutTempPoint[z].remove()
+        }
+        state.blobPutTempPoint = []
+    }
+    var tempXY = {
+        x: 0,
+        y: 0
+    }
+    const createPoint = (event, id) => {
+        var myIcon = L.divIcon({ html: `<div class="BlobEditPoint"></div>` });
+        var rect = L.marker([event.y, event.x], { icon: myIcon, draggable: true }).addTo(map);
+        state.blobPutTempPoint.push(rect);
+        rect.on('dragstart', (e) => {
+            state.blobChangeTempObject = data
+            state.dragObjectStatus = false
+        })
+        rect.on("drag", (e) => {
+            data.options.data.points[0][id - 1] = e.target.getLatLng().lng / width
+            data.options.data.points[0][id] = e.target.getLatLng().lat / height
+            state.pixiWebWorker.postMessage({
+                type: 'splineChange',
+                data: [[data.options.data], state.imgHeight, state.imgWidth]
+            })
+        })
+        rect.on("dragend", (e) => {
+            pushBlob(data.options.data)
+            state.blobChangeTempObject = null
+            state.dragObjectStatus = true
+        })
+    }
+    point.forEach((item, index) => {
+        if (index % 2 === 0) {
+            tempXY.x = item * width
+        } else {
+            tempXY.y = item * height
+            createPoint(tempXY, index)
+            tempXY = {
+                x: 0,
+                y: 0
+            }
+        }
+    })
+}
+const tempRanderTempBlob = (data) => {
+    if (state.blobChangeTempObject !== null) {
+        var blob = data[0].spline[0]
+        state.blobChangeTempObject.setLatLngs([blob])
+        state.blobChangeTempObject.redraw()
+    }
+}
+const endAddBlob = () => {
+    var width = state.imgWidth
+    var height = state.imgHeight
+    var newpoint = state.AddTempPoints
+    var newpointlen = newpoint.length
+    var x = []
+    var y = []
+    var tttt = []
+    for (var i = 0; i < newpointlen; i++) {
+        if (i % 2) {
+            tttt.push(newpoint[i] / height)
+            y.push(newpoint[i] / height)
+        } else {
+            tttt.push(newpoint[i] / width)
+            x.push(newpoint[i] / width)
+        }
+
+    }
+    // var reqdata = {
+    //     type: "ROI",
+    //     method: "add",
+    //     content: {
+    //         RoiType: props.mainMode === "mask" ? "mask" : "blob",
+    //         alarm_status: 0,
+    //         threshold: 30.0,
+    //         group_name: '',
+    //         group_id: '',
+    //         points: {
+    //             A: {
+    //                 x,
+    //                 y
+    //             },
+    //             B: {
+    //                 x: [],
+    //                 y: []
+    //             }
+    //         }
+    //     },
+    //     session: Math.random().toString(36).substr(2)
+    // }
+    var reqdata = {
+        "feature": "roi",
+        "method": "set_roiExist",
+        "session": Math.random().toString(36).substr(2),
+        "content": {
+            "type": 0,
+            "content": {
+                "camera_id": camID,
+                "cursingPoint_id": props.cursingPointValue,
+                "image_type": camType,
+                "roi_type": props.mainMode === "mask" ? "mask" : "blob",
+                "roi_nodeManual": [
+                    tttt
+                ],
+                "roi_alarmSwitch": 0,
+                "roi_number": "",
+                "roi_name": "",
+                "roi_group_id": 1
+            }
+        }
+    }
+    // var reqdata = {
+    //     "type": "masking_add",
+    //     "points": [tttt]
+    // }
+    // console.log(reqdata);
+    // state.ws3.send(JSON.stringify(reqdata))
+    state.tempROIdata = reqdata
+    state.inputRoiNameWindow = true
+    state.moveRemovePoint = false
+    state.AddTempPoints = []
+    state.blobAddTempObject.remove()
+    state.blobAddTempObject = null
+    state.removePoint.remove()
+    state.removePoint = null
+    state.blobStatusAdd = false;
+    state.dragObjectStatus = true
+    state.$store.dispatch('myData/incrementAsync', { type: 'addSnackbar', params: { text: 'blob 完成新增', type: 0, timeout: 1 } });
+}
+const pushBlob = (data) => {
+    // var width = state.imgWidth
+    // var height = state.imgHeight
+    var newpoint = data.points[0]
+    var newpointlen = newpoint.length
+    var x = []
+    var y = []
+    for (var i = 0; i < newpointlen; i++) {
+        if (i % 2) {
+            y.push(newpoint[i])
+        } else {
+            x.push(newpoint[i])
+        }
+    }
+    var reqdata = {
+        type: "ROI",
+        // cam_id: "xxxx",
+        method: "modify",
+        content: {
+            RoiType: props.mainMode === "mask" ? "mask" : "blob",
+            id: data.number,
+            alarm_status: 0,
+            threshold: 30.0,
+            group_name: '',
+            group_id: '',
+            points: {
+                A: {
+                    x,
+                    y
+                },
+                B: {
+                    x: [],
+                    y: []
+                }
+            }
+        },
+        session: Math.random().toString(36).substr(2)
+    }
+    // console.log("push end", reqdata);
+    state.ws3.send(JSON.stringify(reqdata))
+}
+const runRTC = (id, url, videoType) => {
+    var logTime = new Date().getTime()
+    console.log('建立RTC連線', videoType, logTime, url);
+    const retryPause = 2000;
+
+    const video = document.getElementById(id);
+    console.log('rtc video', video);
+    // const startBtn = document.getElementById('recorder-start');
+    // const stopBtn = document.getElementById('recorder-stop');
+
+    const message = document.getElementById('message');
+
+    let pc = null;
+    let restartTimeout = null;
+    let sessionUrl = '';
+    let offerData = '';
+    let queuedCandidates = [];
+    let defaultControls = false;
+    // let redomID = Math.random().toString(36).substring(2, 9);
+    const setMessage = (str) => {
+        if (str !== '') {
+            // video.controls = false;
+        } else {
+            // video.controls = defaultControls;
+        }
+        message.innerText = str;
+    };
+
+    const unquoteCredential = (v) => (
+        JSON.parse(`"${v}"`)
+    );
+
+    const linkToIceServers = (links) => (
+        (links !== null) ? links.split(', ').map((link) => {
+            const m = link.match(/^<(.+?)>; rel="ice-server"(; username="(.*?)"; credential="(.*?)"; credential-type="password")?/i);
+            const ret = {
+                urls: [m[1]],
+            };
+
+            if (m[3] !== undefined) {
+                ret.username = unquoteCredential(m[3]);
+                ret.credential = unquoteCredential(m[4]);
+                ret.credentialType = 'password';
+            }
+
+            return ret;
+        }) : []
+    );
+
+    const parseOffer = (offer) => {
+        const ret = {
+            iceUfrag: '',
+            icePwd: '',
+            medias: [],
+        };
+
+        for (const line of offer.split('\r\n')) {
+            if (line.startsWith('m=')) {
+                ret.medias.push(line.slice('m='.length));
+            } else if (ret.iceUfrag === '' && line.startsWith('a=ice-ufrag:')) {
+                ret.iceUfrag = line.slice('a=ice-ufrag:'.length);
+            } else if (ret.icePwd === '' && line.startsWith('a=ice-pwd:')) {
+                ret.icePwd = line.slice('a=ice-pwd:'.length);
+            }
+        }
+
+        return ret;
+    };
+
+    const enableStereoOpus = (section) => {
+        let opusPayloadFormat = '';
+        let lines = section.split('\r\n');
+
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith('a=rtpmap:') && lines[i].toLowerCase().includes('opus/')) {
+                opusPayloadFormat = lines[i].slice('a=rtpmap:'.length).split(' ')[0];
+                break;
+            }
+        }
+
+        if (opusPayloadFormat === '') {
+            return section;
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith('a=fmtp:' + opusPayloadFormat + ' ')) {
+                if (!lines[i].includes('stereo')) {
+                    lines[i] += ';stereo=1';
+                }
+                if (!lines[i].includes('sprop-stereo')) {
+                    lines[i] += ';sprop-stereo=1';
+                }
+            }
+        }
+
+        return lines.join('\r\n');
+    };
+
+    const editOffer = (offer) => {
+        const sections = offer.sdp.split('m=');
+
+        for (let i = 0; i < sections.length; i++) {
+            const section = sections[i];
+            if (section.startsWith('audio')) {
+                sections[i] = enableStereoOpus(section);
+            }
+        }
+
+        offer.sdp = sections.join('m=');
+    };
+
+    const generateSdpFragment = (od, candidates) => {
+        const candidatesByMedia = {};
+        for (const candidate of candidates) {
+            const mid = candidate.sdpMLineIndex;
+            if (candidatesByMedia[mid] === undefined) {
+                candidatesByMedia[mid] = [];
+            }
+            candidatesByMedia[mid].push(candidate);
+        }
+
+        let frag = 'a=ice-ufrag:' + od.iceUfrag + '\r\n'
+            + 'a=ice-pwd:' + od.icePwd + '\r\n';
+
+        let mid = 0;
+
+        for (const media of od.medias) {
+            if (candidatesByMedia[mid] !== undefined) {
+                frag += 'm=' + media + '\r\n'
+                    + 'a=mid:' + mid + '\r\n';
+
+                for (const candidate of candidatesByMedia[mid]) {
+                    frag += 'a=' + candidate.candidate + '\r\n';
+                }
+            }
+            mid++;
+        }
+
+        return frag;
+    };
+
+    const loadStream = () => {
+        requestICEServers();
+    };
+
+    const onError = (err) => {
+        if (restartTimeout === null) {
+            setMessage(err + ', retrying in some seconds');
+
+            if (pc !== null) {
+                pc.close();
+                pc = null;
+            }
+
+            restartTimeout = window.setTimeout(() => {
+                restartTimeout = null;
+                loadStream();
+            }, retryPause);
+
+            if (sessionUrl) {
+                fetch(sessionUrl, {
+                    method: 'DELETE',
+                });
+            }
+            sessionUrl = '';
+
+            queuedCandidates = [];
+        }
+    };
+
+    const sendLocalCandidates = (candidates) => {
+        fetch(sessionUrl + window.location.search, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/trickle-ice-sdpfrag',
+                'If-Match': '*',
+            },
+            body: generateSdpFragment(offerData, candidates),
+        })
+            .then((res) => {
+                switch (res.status) {
+                    case 204:
+                        break;
+                    case 404:
+                        throw new Error('stream not found');
+                    default:
+                        throw new Error(`bad status code ${res.status}`);
+                }
+            })
+            .catch((err) => {
+                onError(err.toString());
+            });
+    };
+
+    const onLocalCandidate = (evt) => {
+        if (restartTimeout !== null) {
+            return;
+        }
+
+        if (evt.candidate !== null) {
+            if (sessionUrl === '') {
+                queuedCandidates.push(evt.candidate);
+            } else {
+                sendLocalCandidates([evt.candidate])
+            }
+        }
+    };
+
+    const onRemoteAnswer = (sdp) => {
+        if (restartTimeout !== null) {
+            return;
+        }
+
+        pc.setRemoteDescription(new RTCSessionDescription({
+            type: 'answer',
+            sdp,
+        }));
+
+        if (queuedCandidates.length !== 0) {
+            sendLocalCandidates(queuedCandidates);
+            queuedCandidates = [];
+        }
+    };
+
+    const sendOffer = (offer) => {
+        fetch(`${url}/` + 'whep', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/sdp',
+            },
+            body: offer.sdp,
+        })
+            .then((res) => {
+                switch (res.status) {
+                    case 201:
+                        break;
+                    case 404:
+                        throw new Error('stream not found');
+                    default:
+                        throw new Error(`bad status code ${res.status}`);
+                }
+                sessionUrl = new URL(res.headers.get('location'), url).toString();
+                return res.text();
+            })
+            .then((sdp) => onRemoteAnswer(sdp))
+            .catch((err) => {
+                onError(err.toString());
+            });
+    };
+
+    const createOffer = () => {
+        pc.createOffer()
+            .then((offer) => {
+                editOffer(offer);
+                offerData = parseOffer(offer.sdp);
+                pc.setLocalDescription(offer);
+                sendOffer(offer);
+            });
+    };
+
+    const onConnectionState = () => {
+        if (restartTimeout !== null) {
+            return;
+        }
+
+        if (pc.iceConnectionState === 'disconnected') {
+            onError('peer connection disconnected');
+        }
+    };
+
+    const onTrack = (evt) => {
+        setMessage('');
+        var logTimeVidoe = new Date().getTime()
+        console.log('完成RTC連線', videoType, (logTimeVidoe - logTime) / 1000 + 's');
+        if (videoType === 'vis') {
+            video.srcObject = evt.streams[0];
+            // state.rtcVIDEOLIST.vis = evt.streams[0];
+            state.rtcVIDEOLIST.push(evt.streams[0]);
+            // let chunks = []
+            // var mediaRecorder = new MediaRecorder(evt.streams[0])
+            // const onStartRecording = () => {
+            // mediaRecorder.start(1000)   // 可使錄製影音串流
+            // stopBtn.classList.remove('vdisplay')
+            // startBtn.classList.add('vdisplay')
+            // state.recoderTime = 0
+            // }
+            // const onStopRecording = () => {
+            //     mediaRecorder.stop()    // 結束錄製影音串流
+            //     var blob = new Blob(chunks, { 'type': 'video/webm; codecs=vp9' })
+            //     // 把 blob 物件透過 URL.createObjectURL() 代入 src 內
+            //     var outputVideoURL = URL.createObjectURL(blob)
+            //     let downloadLink = document.createElement('a');
+            //     downloadLink.href = outputVideoURL;
+            //     downloadLink.download = 'recordedVideo.webm'; // 设置下载文件名
+            //     downloadLink.innerText = '下載'
+            //     document.body.appendChild(downloadLink);
+            //     downloadLink.click();
+            //     // 清理掉创建的下载链接元素
+            //     document.body.removeChild(downloadLink);
+            //     startBtn.classList.remove('vdisplay')
+            //     stopBtn.classList.add('vdisplay')
+            // }
+            // startBtn.addEventListener('click', e => onStartRecording())
+            // stopBtn.addEventListener('click', e => onStopRecording())
+            // const mediaRecorderOnDataAvailable = (e) => {
+            // state.recoderTime++
+            // chunks.push(e.data)
+            // }
+            // mediaRecorder.addEventListener('dataavailable', mediaRecorderOnDataAvailable)
+        } else if (videoType === 'ir') {
+            // state.rtcVIDEOLIST.ir = evt.streams[0];
+            state.rtcVIDEOLIST.push(evt.streams[0]);
+        }
+    };
+
+    const requestICEServers = () => {
+        fetch(`${url}/` + 'whep', {
+            method: 'OPTIONS',
+        })
+            .then((res) => {
+                pc = new RTCPeerConnection({
+                    iceServers: linkToIceServers(res.headers.get('Link')),
+                    // https://webrtc.org/getting-started/unified-plan-transition-guide
+                    sdpSemantics: 'unified-plan',
+                });
+                state.rtcPeerConnectionItems.push(pc);
+                const direction = 'sendrecv';
+                pc.addTransceiver('video', { direction });
+                pc.addTransceiver('audio', { direction });
+
+                pc.onicecandidate = (evt) => onLocalCandidate(evt);
+                pc.oniceconnectionstatechange = () => onConnectionState();
+                pc.ontrack = (evt) => onTrack(evt);
+
+                createOffer();
+            })
+            .catch((err) => {
+                onError(err.toString());
+            });
+    };
+
+    const parseBoolString = (str, defaultVal) => {
+        str = (str || '');
+
+        if (['1', 'yes', 'true'].includes(str.toLowerCase())) {
+            return true;
+        }
+        if (['0', 'no', 'false'].includes(str.toLowerCase())) {
+            return false;
+        }
+        return defaultVal;
+    };
+    const loadAttributesFromQuery = () => {
+        const params = new URLSearchParams(window.location.search);
+        // video.controls = parseBoolString(params.get('controls'), true);
+        // video.muted = parseBoolString(params.get('muted'), true);
+        // video.autoplay = parseBoolString(params.get('autoplay'), true);
+        // video.playsInline = parseBoolString(params.get('playsinline'), true);
+        defaultControls = video.controls;
+    };
+
+    const init = () => {
+        loadAttributesFromQuery();
+        loadStream();
+    };
+    init()
+    // window.addEventListener('DOMContentLoaded', init);
+}
+const initWs3 = () => {
+    const openwebsocket03 = () => {
+        if ($webSocketconnect03().readyState === 1) {
+            state.ws3 = $webSocketconnect03()
+            if (state.wsListener3.close !== null) {
+                state.ws3.removeEventListener("close", state.wsListener3.close)
+                state.wsListener3.close = null
+            }
+            const colseEvent = () => {
+                setTimeout(() => {
+                    openwebsocket03()
+                }, 1000)
+            }
+            state.ws3.addEventListener("close", colseEvent)
+            state.wsListener3.close = colseEvent
+            // var tew = 0
+            const messageEvent = (event) => {
+                // var data = JSON.parse(event.data)
+                // console.log("data", data);
+            }
+            state.ws3.addEventListener("message", messageEvent)
+            // state.wsListener3.message = messageEvent
+        } else if ($webSocketconnect03().readyState !== 1) {
+            setTimeout(() => {
+                openwebsocket03()
+            }, 1000)
+        }
+    }
+    openwebsocket03()
+}
+// =================================================================
+
+onMounted(() => {
+    initWs3()
+    // setInterval(() => {
+    //     console.log('displayRoi', $displayRoi());
+    // },1000)
+    document.addEventListener('mousedown', (event) => {
+        event.preventDefault()
+        if (event.button === 0 && map !== null) {
+            map.dragging.disable()
+        }
+
+    });
+    document.addEventListener('mouseup', () => {
+        if (map !== null) {
+            map.dragging.enable()
+        }
+    });
+    state.workerTurf = new Worker('/worker/workerTurf.js');
+    state.workerTurf.addEventListener('message', (e) => {
+        var data = e.data.parameter
+        // console.log(data);
+        if (state.objectMask !== null) {
+            state.objectMask.eachLayer((item) => {
+                item.setLatLngs(data)
+            })
+            // state.objectMask
+        }
+        data = null
+    })
+    // console.log(workerTurf);
+    // state.state()
+    state.pixiWebWorker = new Worker('/worker/workerpixpjs.js');
+    state.pixiWebWorker.addEventListener('message', (e) => {
+        var data = e.data
+        if (data.type === 'splineCurrent') {
+            // (backup)20230714 spline 函數移交至後端計算
+            if (!state.waitingToJoin) {
+                runBlob(data.parameter, data.objectName)
+            }
+            // (backup)20230714 spline 函數移交至後端計算 end
+        } else if (data.type === 'splineCurrentOnly') {
+            if (state.blobAddTempObject !== null) {
+                var blob = Array.from(data.parameter)
+                state.blobAddTempObject.setLatLngs([blob])
+            }
+            // state.blobAddTempObject.setLatLngs(Array.from(data.parameter))
+            // state.drawTempBlob(Array.from(data.parameter))
+        } else if (data.type === 'splineChange') {
+            tempRanderTempBlob(data.parameter)
+        }
+        data = null
+    }, false);
+
+    // var indexxx = 100
+    if (state.templatePointInt !== null) {
+        clearInterval(state.templatePointInt)
+        state.templatePointInt = null
+    }
+    state.templatePointInt = setInterval(() => {
+        try {
+            var arr = []
+            state.pixispot.forEach((item) => {
+                arr.push(item)
+            })
+            state.pixiline.forEach((item) => {
+                arr.push(item)
+            })
+            state.pixiscope.forEach((item) => {
+                arr.push(item)
+            })
+            state.pixiJsRoiBlobData.forEach((item) => {
+                arr.push({ data: item.info, tempPointID: item.tempPointID })
+                // console.log(item);
+            })
+            arr.forEach((item) => {
+                // console.log(item);
+                var temperatureBar = document.getElementById(`temperature-bar-${item.tempPointID}`)
+                var temperatureBarBubbleNumber = document.getElementById(`temperature-bar-bubble-number-${item.tempPointID}`)
+                if (temperatureBar !== undefined) {
+                    var max = item.data?.temperature_point?.temperature_ranger.max
+                    var min = item.data?.temperature_point?.temperature_ranger.min
+                    var randomInt = 0;
+                    if (item.data?.temperature) {
+                        randomInt = item.data?.temperature
+                    } else if (item.data?.temperature_max) {
+                        randomInt = item.data?.temperature_max
+                    }
+                    var num = ((randomInt / (max - min)) * 100) + 100
+                    temperatureBar.style.transform = `translateX(-${num - 50}px)`; // 更改translateX的值
+                    temperatureBarBubbleNumber.innerHTML = `${randomInt}`
+                    temperatureBar.style.background = `linear-gradient(to right,
+    #B6B6B6 0px, #B6B6B6 ${item.data.temperature_point.median.start + 100}px,
+    #FFE55B ${item.data.temperature_point.median.start + 101}px, #FFE55B ${item.data.temperature_point.median.end + 100}px,
+    #FF5A13  ${item.data.temperature_point.median.end + 100}px, #FF5A13 300px
+)`;
+                }
+            })
+            arr = null
+        } catch (error) {
+            console.log(error);
+        }
+        // var testdiv = document.querySelector('.temperature-bar')
+        // var terstbum = document.querySelector('.temperature-bar-bubble-number')
+        // if (testdiv !== undefined) {
+        //     var max = 1000
+        //     var min = 0
+        //     var randomInt = getRandomInteger(min, max);
+        //     var num = ((randomInt / (max - min)) * 100) + 100
+        //     testdiv.style.transform = `translateX(-${num - 50}px)`; // 更改translateX的值
+        //     terstbum.innerHTML = `${randomInt}`
+        // }
+        // 測試邊界
+        // console.log(state.pixiscope);
+
+    }, 1000)
+    // function getRandomInteger(min, max) {
+    // 確保結果是包含 min 和 max 的整數
+    // return Math.floor(Math.random() * (max - min + 1)) + min;
+    // }
+    // 漂浮工具 腳本
+    // var window1 = document.body
+    // var divtemppostion = {
+    //     x: 0,
+    //     y: 0
+    // }
+    // var templocation = {
+    //     x: 0,
+    //     y: 0
+    // }
+    // var focusTemp = null
+    // window1.addEventListener("mousedown", (e) => {
+    //     templocation.x = e.clientX
+    //     templocation.y = e.clientY
+    // })
+    // window1.addEventListener("mousemove", (e) => {
+    //     if (focusTemp !== null) {
+    //         var nl = {
+    //             x: templocation.x - e.clientX,
+    //             y: templocation.y - e.clientY
+    //         }
+    //         focusTemp.style.left = (divtemppostion.x - nl.x) + 'px'
+    //         focusTemp.style.top = (divtemppostion.y - nl.y) + 'px' // 限制只能左右移動
+    //     }
+    // })
+    // var tooltipClick = document.getElementById('groupwindowObject')
+    // var tooltipClickIcon = document.getElementById('groupwindowObject-icon')
+    // tooltipClick.addEventListener('mousedown', (e) => {
+    //     focusTemp = tooltipClick
+    //     divtemppostion.x = tooltipClick.getBoundingClientRect().x;
+    //     divtemppostion.y = tooltipClick.getBoundingClientRect().y;
+    // })
+    // tooltipClick.addEventListener('mouseup', (e) => {
+    //     focusTemp = null
+    // })
+    // tooltipClickIcon.addEventListener('mousedown', (e) => {
+    //     tooltipClickIcon.style.transform = 'scale(1.3)';
+    // })
+    // tooltipClickIcon.addEventListener('mouseenter', (e) => {
+    //     tooltipClickIcon.style.transform = 'scale(1.2)';
+    // })
+    // tooltipClickIcon.addEventListener("mouseout", (e) => {
+    //     tooltipClickIcon.style.transform = 'scale(1)';
+    // })
+    // tooltipClickIcon.addEventListener('mouseup', (e) => {
+    //     tooltipClickIcon.style.transform = 'scale(1)';
+    // })
+    // initWs3()
+})
+onBeforeUnmount(() => {
+    console.log('onBeforeUnmount');
+    state.rtcPeerConnectionItems.forEach((item) => {
+        item.close();
+    })
+    if (state.workerTurf !== null) {
+        state.workerTurf.terminate();
+        state.workerTurf = null
+    }
+    if (state.pixiWebWorker !== null) {
+        state.pixiWebWorker.terminate();
+        state.pixiWebWorker = null
+    }
+    if (state.templatePointInt !== null) {
+        clearInterval(state.templatePointInt)
+        state.templatePointInt = null
+    }
+    if (state.reqAnim !== null) {
+        clearInterval(state.reqAnim)
+        state.reqAnim = null
+    }
+
+    if (state.wsListener3.close !== null) {
+        state.ws3.removeEventListener("close", state.wsListener3.close)
+        state.wsListener3.close = null
+    }
+    if (state.wsListener3.message !== null) {
+        state.ws3.removeEventListener("message", state.wsListener3.message)
+        state.wsListener3.message = null
+    }
+    if (state.ws3 !== null) {
+        // state.ws.close()
+        state.ws3 = null
+    }
+    if (state.refreshMapTimeout !== null) {
+        clearTimeout(state.refreshMapTimeout)
+    }
+})
+defineExpose({
+    requestBtnGroupEvent,
+})
+</script>
+<style scoped>
+.def-point-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 12% 64% 24%;
+    cursor: pointer;
+    /* background-color: #fff; */
+}
+
+.def-point-item {
+    background-color: #fff;
+    transition: .2s;
+    border: 2px #EAEAEA solid;
+}
+
+.def-point-item:hover {
+    background-color: #f5f5f5;
+}
+
+.def-point-id {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.def-point-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: #AEBBC3;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 1.5em;
+}
+
+.def-point-name {
+    color: #2B2D2C;
+    font-weight: 700;
+}
+
+.def-point-stoptime {
+    font-size: 14px;
+}
+
+.def-point-meun {
+    display: flex;
+    align-items: center;
+}
+
+.def-point-meun-btn {
+    width: 32px;
+    pointer-events: auto;
+    background-color: #ffffff00;
+    transition: .2s;
+    border-radius: 5px;
+}
+
+.def-point-meun-btn:hover {
+    background-color: #ececec;
+}
+
+.def-point-meun-btn:active {
+    background-color: #d3d3d3;
+}
+
+.cameraList-gird {
+    display: grid;
+    grid-template-columns: 25% 25% 25% 25%;
+    width: 100%;
+}
+
+.camera-canvas>img {
+    border-radius: 3px;
+    border: 2px #EAEAEA solid;
+}
+
+#temp-copy-object {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    pointer-events: none;
+    opacity: .8;
+}
+
+.test-show-rotate {
+    top: 39%;
+    left: 30%;
+    position: fixed;
+    z-index: 99999;
+    white-space: pre-wrap;
+    /* Preserve whitespace and wrap lines */
+    font-family: monospace;
+    /* Use a monospace font */
+    background-color: #f4f4f4;
+    /* Light background color */
+    border: 1px solid #ccc;
+    /* Light border */
+    padding: 10px;
+    /* Padding */
+    margin: 20px;
+    /* Margin */
+    overflow: auto;
+    /* Scroll if necessary */
+    max-height: 400px;
+    /* Limit max height */
+    line-height: 1.5;
+    /* Line height for better readability */
+    word-wrap: break-word;
+    /* Break long words */
+}
+</style>
+
+<style>
+.spot-div-number {
+    background-color: #fff;
+    width: 22px;
+    height: 22px;
+    border-radius: 24px;
+    border: 1px #000 solid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    transform: translate(-23px, -29px);
+}
+
+.div-point {
+    background-color: #fff;
+    width: 22px;
+    height: 22px;
+    border-radius: 24px;
+    border: 1px #000 solid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    transform: translate(2px, -11px);
+}
+
+.blob-div-addpoint {
+    background-color: #fff;
+    width: 10px;
+    height: 10px;
+    border-radius: 24px;
+    border: 1px #000 solid;
+    /* transform: translate(2px, -11px); */
+}
+
+.RevisionObject {
+    background-color: #fff;
+    width: 20px;
+    height: 20px;
+    border: 1px #000 solid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    transform: translate(-3px, 0px);
+}
+
+.BlobEditPoint {
+    background-color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 20px;
+    border: 1px #000 solid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    transform: translate(-3px, 0px);
+}
+
+.removepoint {
+    background-color: #fff;
+    width: 20px;
+    height: 20px;
+    border: 1px #000 solid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    transform: translate(-3px, 0px);
+    z-index: 99;
+}
+
+.cur-top-left,
+.cur-bottom-right {
+    cursor: nw-resize;
+}
+
+.cur-top,
+.cur-bottom {
+    cursor: n-resize;
+}
+
+.cur-top-right,
+.cur-bottom-left {
+    cursor: ne-resize;
+}
+
+.cur-right,
+.cur-left {
+    cursor: w-resize;
+}
+
+.item-card-content {
+    transition: all 1s;
+}
+
+.map-top-c {
+    z-index: 5;
+    width: 90vw;
+    height: 95vh;
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.floatingDiv-111 {
+    position: fixed;
+    padding: 5px;
+    background: rgb(227 227 227);
+    font-size: 25px;
+    color: crimson;
+    animation: floatLeftRight 2s infinite;
+    box-shadow: 1px 1px 1px #b2b2b2;
+    border-radius: 9px;
+    width: fit-content;
+    transform: translateY(-50%);
+}
+
+@keyframes floatLeftRight {
+    0% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(3px);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.recorder-canvas {
+    position: fixed;
+    left: 10px;
+    bottom: 10px;
+    background-color: #fff;
+    border: 1px solid #000;
+}
+
+.vdisplay {
+    pointer-events: none;
+    color: #5e5e5e !important;
+    opacity: 0.4;
+}
+
+.temperature-bar-main {
+    /* position: fixed;
+    top: 50%; */
+    /* left: 50%; */
+    /* z-index: 9999; */
+    transform: translate(-2px, -23px);
+}
+
+.temperature-bar-canvas {
+    position: relative;
+    width: 141px;
+    height: 10px;
+    border: 1px solid black;
+    overflow: hidden;
+}
+
+.temperature-bar {
+    width: 300px;
+    height: 10px;
+    position: relative;
+    /* background: blanchedalmond; */
+    transition: all .1s;
+    transform: translateX(-100px);
+    background: linear-gradient(to right,
+            #B6B6B6 0px, #B6B6B6 120px,
+            /* 0~200px 灰 */
+            #FFE55B 121px, #FFE55B 160px,
+            /* 201~280px 黃 */
+            #FF5A13 160px, #FF5A13 300px
+            /* 281~400px 紅 */
+        );
+}
+
+.temperature-bar::before {
+    content: '';
+    position: absolute;
+    height: 40%;
+    width: 100%;
+    background: repeating-linear-gradient(to right,
+            black,
+            black 1px,
+            rgba(255, 255, 255, 0) 1px,
+            rgba(255, 255, 255, 0) 10px);
+}
+
+.temperature-bar::after {
+    content: '';
+    position: absolute;
+    height: 60%;
+    width: 100%;
+    background: repeating-linear-gradient(to right,
+            black,
+            black 1px,
+            rgba(255, 255, 255, 0) 1px,
+            rgba(255, 255, 255, 0) 50px);
+}
+
+.temperature-bar-bubble {
+    position: absolute;
+    top: -38px;
+    left: 40px;
+    padding: 10px;
+    background-color: #DBE2E5;
+    border-radius: 4px;
+    height: 27px;
+    width: 30px;
+    /* border: 1px solid #000;
+    /* border: 1px solid #000; */
+}
+
+.temperature-bar-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 7px;
+    border-style: solid;
+    border-color: #DBE2E5 transparent transparent transparent;
+    /* border: 1px solid #000; */
+}
+
+.temperature-bar-bubble-number {
+    position: absolute;
+    left: 50%;
+    top: 56%;
+    transform: translate(-50%, -50%);
+}
+
+.lnder0move {
+    width: 12px;
+    height: 12px;
+    background-color: #fff;
+    
+    border-radius: 20px;
+    transform: translate(-0px, -0px);
+}
+
+.lnder0move-font {
+    width: 100px;
+    font-size: 16px;
+}
+.lnder0move-ptz {
+    width: 12px;
+    height: 12px;
+    /* background-color: #FFE55B; */
+    border-radius: 20px;
+    transform: translate(-0px, -0px);
+}
+
+.lnder0move-font-ptz {
+    width: 100px;
+    font-size: 16px;
+}
+</style>
