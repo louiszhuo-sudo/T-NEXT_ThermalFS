@@ -35,7 +35,7 @@ npm run build:desktop
 npm run pack:win
 ```
 
-`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.4.exe`.
+`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.6.exe`.
 
 Packaged account data is initialized from `apps/nuxt/auth.json` and stored in the Electron user data directory. The monitoring panel starts with recording and upload paused.
 

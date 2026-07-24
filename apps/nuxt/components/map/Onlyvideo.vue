@@ -2,15 +2,22 @@
     <div class="item-card-content pa-0" id="map-top-b" style="height: 100%; width: 100%;z-index: 0;" ref="mapcanvas">
         <div ref="LMmap" style="height: 100%; width: 100%">
         </div>
-        <div id="message" style="display: none;">
+        <div ref="messageRef" style="display: none;">
         </div>
     </div>
 </template>
 <script setup>
 import { ref } from 'vue'
 const { $getIpaddress } = useNuxtApp()
+const props = defineProps({
+    streamUrl: {
+        type: String,
+        default: ''
+    }
+})
 const LMmap = ref(null)
 const mapcanvas = ref(null)
+const messageRef = ref(null)
 const runIndex = reactive({
     index: 0
 })
@@ -131,8 +138,11 @@ const leafletJsInit = () => {
     // };
     state.videoTag = videoTag
     const currentPort = window.location.port;
-    // console.log(`http://${$getIpaddress()}:${currentPort}/video/realtime/${camType}${camID}`);
-    runRTC(`video${camType}${camID}-${state.randomID}`, `http://${$getIpaddress()}:${currentPort}/video/realtime/${camType}${camID}`, 'vis') // [element id,video url]
+    const streamPath = props.streamUrl
+        ? new URL(props.streamUrl).pathname + new URL(props.streamUrl).search
+        : `/video/realtime/${camType}${camID}`
+    const streamUrl = `http://${$getIpaddress()}:${currentPort}${streamPath}`
+    runRTC(`video${camType}${camID}-${state.randomID}`, streamUrl, 'vis') // [element id,video url]
     // const hiddenBtn = (e) => {
     //     console.log("hiddenBtn", map.getZoom());
     //     if (state.minzoomtemp > map.getZoom()) {
@@ -242,7 +252,7 @@ const runRTC = (id, url, videoType) => {
     // const startBtn = document.getElementById('recorder-start');
     // const stopBtn = document.getElementById('recorder-stop');
 
-    const message = document.getElementById('message');
+    const message = messageRef.value;
 
     let pc = null;
     let restartTimeout = null;
@@ -257,7 +267,7 @@ const runRTC = (id, url, videoType) => {
         } else {
             // video.controls = defaultControls;
         }
-        message.innerText = str;
+        if (message) message.innerText = str;
     };
 
     const unquoteCredential = (v) => (
