@@ -10,7 +10,7 @@ const DEFAULT_DEV_URL = 'http://127.0.0.1:3000';
 const DEFAULT_PROD_PORTS = [3000];
 const DEFAULT_LOCAL_HOST = '127.0.0.1';
 const DEFAULT_LAN_BIND_HOST = '0.0.0.0';
-const DEFAULT_NETWORK_MODE = 'local';
+const DEFAULT_NETWORK_MODE = 'lan';
 const DEFAULT_START_TIMEOUT_MS = 30000;
 
 function getTransport(urlString) {
@@ -74,8 +74,9 @@ async function waitForHealthUrl(urlString, timeoutMs = DEFAULT_START_TIMEOUT_MS,
 }
 
 function normalizeNetworkMode(value) {
-  return String(value || '').trim().toLowerCase() === 'lan'
-    ? 'lan'
+  const normalizedValue = String(value || '').trim().toLowerCase();
+  return normalizedValue === 'lan' || normalizedValue === 'local'
+    ? normalizedValue
     : DEFAULT_NETWORK_MODE;
 }
 

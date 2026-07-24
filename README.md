@@ -19,7 +19,7 @@ npm install
 npm run dev:web
 ```
 
-Both the web development server and packaged desktop runtime use `http://127.0.0.1:3000` by default. Packaged builds fail into the recovery flow if port 3000 is already occupied; set `THERMALFS_SERVER_PORT` to override it.
+Both the web development server and packaged desktop runtime bind to `0.0.0.0:3000` by default so other computers on the LAN can open `http://<server-ip>:3000`. Electron itself still connects through `http://127.0.0.1:3000`. Set `THERMALFS_NETWORK_MODE=local` to restrict access to this computer, or `THERMALFS_SERVER_PORT` to override the port. Windows Firewall must also allow inbound TCP traffic on the selected port.
 
 ```powershell
 npm run electron:dev
@@ -35,7 +35,7 @@ npm run build:desktop
 npm run pack:win
 ```
 
-`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.6.exe`.
+`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.7.exe`.
 
 Packaged account data is initialized from `apps/nuxt/auth.json` and stored in the Electron user data directory. The monitoring panel starts with recording and upload paused.
 
