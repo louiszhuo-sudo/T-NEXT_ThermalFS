@@ -12,6 +12,7 @@
 <script setup>
 import { ref } from 'vue'
 import L from 'leaflet'
+import { createWhepPlayer } from '../../utils/whepPlayer'
 const { $getIpaddress } = useNuxtApp()
 const LMmap = ref(null)
 const mapcanvas = ref(null)
@@ -781,7 +782,26 @@ const invaliMapSzie = (aspectRatio = 1.725) => {
     }
 }
 // webRTC 連接
-const runRTC = (id, url, videoType) => {
+const rtcPlayers = new Map()
+const runRTC = (id, url) => {
+    const video = document.getElementById(id)
+    if (!video) {
+        console.warn(`[RTC] video element not found: ${id}`)
+        return null
+    }
+
+    rtcPlayers.get(id)?.stop()
+    const player = createWhepPlayer({
+        video,
+        url
+    })
+    rtcPlayers.set(id, player)
+    player.start()
+    return player
+}
+
+// Kept temporarily for reference while every RTC view migrates to createWhepPlayer.
+const runRTCLegacy = (id, url, videoType) => {
     var logTime = new Date().getTime()
     // console.log('建立RTC連線', videoType, logTime, url);
     const retryPause = 2000;
@@ -1335,6 +1355,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+    rtcPlayers.forEach((player) => player.stop())
+    rtcPlayers.clear()
     console.log('onBeforeUnmount');
     // 安全關閉webworker
     if (state.webWorker !== null) {

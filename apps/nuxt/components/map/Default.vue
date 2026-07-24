@@ -121,6 +121,7 @@
 </template>
 <script setup>
 import { ref } from 'vue'
+import { createWhepPlayer } from '../../utils/whepPlayer'
 // import L from 'leaflet'
 const { $getIpaddress } = useNuxtApp()
 const { $webSocket02URL } = useNuxtApp()
@@ -4372,7 +4373,26 @@ const pushBlob = (data) => {
     // console.log("push end", reqdata);
     state.ws3.send(JSON.stringify(reqdata))
 }
-const runRTC = (id, url, videoType) => {
+const rtcPlayers = new Map()
+const runRTC = (id, url) => {
+    const video = document.getElementById(id)
+    if (!video) {
+        console.warn(`[RTC] video element not found: ${id}`)
+        return null
+    }
+
+    rtcPlayers.get(id)?.stop()
+    const player = createWhepPlayer({
+        video,
+        url
+    })
+    rtcPlayers.set(id, player)
+    player.start()
+    return player
+}
+
+// Kept temporarily for reference while every RTC view migrates to createWhepPlayer.
+const runRTCLegacy = (id, url, videoType) => {
     var logTime = new Date().getTime()
     // console.log('建立RTC連線', videoType, logTime, url);
     const retryPause = 2000;
@@ -5194,6 +5214,8 @@ onMounted(() => {
     // initWs3()
 })
 onBeforeUnmount(() => {
+    rtcPlayers.forEach((player) => player.stop())
+    rtcPlayers.clear()
     state.rtcPeerConnectionItems.forEach((item) => {
         item.close();
     })

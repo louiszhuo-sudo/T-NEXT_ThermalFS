@@ -73,6 +73,7 @@
 <script setup>
 import { map } from "leaflet"
 import { resolveTextureUrl } from "pixi.js"
+import { createWhepPlayer } from '../../utils/whepPlayer'
 
 const { $getIpaddress } = useNuxtApp()
 const { $webSocketconnect03 } = useNuxtApp()
@@ -1627,7 +1628,25 @@ onMounted(() => {
 //         ptzControl()
 //     }, 300)
 // }
-const runRTC = (dom, url, videoType) => {
+const rtcPlayers = new Map()
+const runRTC = (dom, url) => {
+    if (!dom) {
+        console.warn('[RTC] video element not found for video stream')
+        return null
+    }
+
+    rtcPlayers.get(dom)?.stop()
+    const player = createWhepPlayer({
+        video: dom,
+        url
+    })
+    rtcPlayers.set(dom, player)
+    player.start()
+    return player
+}
+
+// Kept temporarily for reference while every RTC view migrates to createWhepPlayer.
+const runRTCLegacy = (dom, url, videoType) => {
     // console.log('建立RTC連線 (main)', videoType, url);
     const retryPause = 2000;
 
@@ -1997,6 +2016,8 @@ const sendPtzControl = () => {
 
 }
 onBeforeUnmount(() => {
+    rtcPlayers.forEach((player) => player.stop())
+    rtcPlayers.clear()
     stopProgram()
 })
 defineExpose({

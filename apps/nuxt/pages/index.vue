@@ -58,10 +58,6 @@
             </div> -->
                 <!-- side D 視窗-->
                 <div class="d-flex header-right-actions">
-                    <v-btn class="water-cannon-trigger" variant="text" aria-label="開啟水砲控制"
-                        @click="waterCannonDialog = true">
-                        <img src="/images/fs/water-cannon.png" alt="水砲控制" />
-                    </v-btn>
                     <div style="width: 150px;">
                         <v-select v-model="state.viewMode" density="compact" hide-details details
                             :items="state.viewModeItems" @update:modelValue="updataSelectMode"></v-select>
@@ -79,7 +75,12 @@
                         </v-list>
                     </v-menu>
 
-                    <v-btn icon variant="text" color="black" @click="openSideD()" style="margin-top: -5px">
+                    <v-btn class="water-cannon-trigger" variant="text" aria-label="開啟水砲控制"
+                        @click="waterCannonDialog = true">
+                        <img src="/images/fs/water-cannon.png" alt="水砲控制" />
+                    </v-btn>
+                    <v-btn class="header-notification-trigger" icon variant="text" color="black"
+                        @click="openSideD()" style="margin-top: -5px">
                         <v-badge :color="alertNumber !== 0 ? 'error' : 'transparent'" style="color:transparent"
                             :content="alertNumber">
                             <v-icon color="black">mdi-bell</v-icon>
@@ -176,7 +177,7 @@
                 </v-card-actions>
             </v-card>
         </v-dialog>
-        <v-dialog v-model="waterCannonDialog" class="water-cannon-dialog-shell" width="1334"
+        <v-dialog v-model="waterCannonDialog" class="water-cannon-dialog-shell" width="1434"
             max-width="calc(100vw - 48px)" scrollable>
             <v-card class="water-cannon-dialog">
                 <div class="water-cannon-dialog__header">
@@ -200,7 +201,8 @@
                             </div>
                         </div>
                         <div class="water-cannon-preview-actions">
-                            <span>{{ waterCannonCountdown > 0
+                            <span :class="{ 'water-cannon-countdown--empty': waterCannonCountdown <= 0 }">{{
+                                waterCannonCountdown > 0
                                 ? `倒數 ${waterCannonCountdown} 秒後，自動啟動水砲`
                                 : '--' }}</span>
                             <v-btn v-if="waterCannonCountdown > 0" color="#ff6868" variant="flat"
@@ -216,14 +218,26 @@
                         </label>
                         <label>
                             <span>模式</span>
-                            <v-select v-model="waterCannonMode" density="compact" hide-details
-                                :items="waterCannonModes" @update:model-value="setWaterCannonMode" />
+                            <v-select v-model="waterCannonMode" class="water-cannon-state-select"
+                                :class="waterCannonMode === '自動' ? 'is-green' : 'is-red'" density="compact"
+                                hide-details :items="waterCannonModes" @update:model-value="setWaterCannonMode">
+                                <template #item="{ props, item }">
+                                    <v-list-item v-bind="props" class="water-cannon-select-option"
+                                        :class="item.raw === '自動' ? 'is-green' : 'is-red'" />
+                                </template>
+                            </v-select>
                         </label>
                         <label>
                             <span>閘門</span>
-                            <v-select v-model="waterCannonGate" density="compact" hide-details
-                                :items="waterCannonGates" :disabled="waterCannonMode === '自動'"
-                                @update:model-value="setWaterCannonGate" />
+                            <v-select v-model="waterCannonGate" class="water-cannon-state-select"
+                                :class="waterCannonGate === '開' ? 'is-red' : 'is-green'" density="compact"
+                                hide-details :items="waterCannonGates" :disabled="waterCannonMode === '自動'"
+                                @update:model-value="setWaterCannonGate">
+                                <template #item="{ props, item }">
+                                    <v-list-item v-bind="props" class="water-cannon-select-option"
+                                        :class="item.raw === '開' ? 'is-red' : 'is-green'" />
+                                </template>
+                            </v-select>
                         </label>
 
                         <div class="water-cannon-direction">
@@ -1032,8 +1046,13 @@ onBeforeUnmount(() => {
     width: 36px;
     min-width: 36px;
     height: 36px;
+    margin-left: -4px;
     margin-top: -2px;
     padding: 6px;
+}
+
+.header-notification-trigger {
+    margin-left: -4px;
 }
 
 .water-cannon-trigger img {
@@ -1043,9 +1062,9 @@ onBeforeUnmount(() => {
 }
 
 .water-cannon-dialog {
-    width: 1334px;
+    width: 1434px;
     max-width: calc(100vw - 48px);
-    min-height: 866px;
+    min-height: 966px;
     color: #414141;
 }
 
@@ -1071,7 +1090,7 @@ onBeforeUnmount(() => {
 
 .water-cannon-dialog__body {
     display: grid;
-    grid-template-columns: minmax(0, 932px) 264px;
+    grid-template-columns: minmax(0, 1032px) 264px;
     gap: 58px;
     padding: 10px 38px 14px !important;
 }
@@ -1099,9 +1118,13 @@ onBeforeUnmount(() => {
     font-size: 14px;
 }
 
+.water-cannon-countdown--empty {
+    color: #000;
+}
+
 .water-cannon-preview {
     position: relative;
-    min-height: 340px;
+    min-height: 390px;
     overflow: hidden;
 }
 
@@ -1126,6 +1149,30 @@ onBeforeUnmount(() => {
     gap: 6px;
     font-size: 14px;
     font-weight: 500;
+}
+
+.water-cannon-state-select.is-green :deep(.v-select__selection-text) {
+    color: #006400;
+    font-weight: 600;
+}
+
+.water-cannon-state-select.is-red :deep(.v-select__selection-text) {
+    color: #8b0000;
+    font-weight: 600;
+}
+
+.water-cannon-state-select.v-input--disabled {
+    opacity: 1;
+}
+
+.water-cannon-select-option.is-green {
+    color: #006400;
+    font-weight: 600;
+}
+
+.water-cannon-select-option.is-red {
+    color: #8b0000;
+    font-weight: 600;
 }
 
 .direction-pad {
