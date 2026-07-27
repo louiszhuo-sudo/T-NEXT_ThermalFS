@@ -18,8 +18,16 @@ const {
   NuxtRuntimeManager,
   probeHealthUrl,
 } = require('./runtime-manager.cjs');
+const {
+  createDefaultSettings,
+  readSettings,
+  saveSettings,
+  validateSettings,
+} = require('./settings-store.cjs');
 
 app.setName('ThermalFS');
+const appUserModelId = 'com.yst.thermalfs.donghe';
+app.setAppUserModelId(appUserModelId);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -33,7 +41,7 @@ const defaultAutoLoginCredentials = {
 };
 const authCookieName = 'nuxt-jwt-auth-token';
 const authSessionLifetimeMs = 14 * 24 * 60 * 60 * 1000;
-const releaseUpdateDate = '2026-07-22';
+const releaseUpdateDate = '2026-07-27';
 const copyrightNotice = 'Copyright © 2026 YST. All rights reserved.';
 const legacyUserDataDirNames = [];
 const defaultGeneralBounds = { x: 100, y: 100, width: 1280, height: 720 };
@@ -46,6 +54,7 @@ const defaultStartupUnresponsiveGraceMs = Number(process.env.THERMALFS_STARTUP_U
 let mainWindow = null;
 let recoveryWindow = null;
 let monitoringWindow = null;
+let settingsWindow = null;
 let appTray = null;
 let monitoringManager = null;
 let isAlwaysOnTop = true;
@@ -58,6 +67,7 @@ let isAboutDialogOpen = false;
 let isRecovering = false;
 let isRestartingMainWindow = false;
 let isAppQuitting = false;
+let isApplyingSettings = false;
 let recoveryCountdownTimer = null;
 let allowManualMinimize = false;
 let remainingRecoverySeconds = 0;
@@ -67,6 +77,7 @@ let recoveryTargetFrameless = false;
 let recoveryReason = '';
 let recoveryDetails = {};
 let runtimeManager = null;
+let currentSettings = createDefaultSettings();
 
 function clearPendingUnresponsiveRecovery(win) {
   if (!win || !win.__pendingUnresponsiveRecoveryTimer) {
@@ -78,7 +89,7 @@ function clearPendingUnresponsiveRecovery(win) {
 }
 
 function scheduleUnresponsiveRecovery(win) {
-  if (!win || win.isDestroyed() || isAppQuitting || isRecovering) {
+  if (!win || win.isDestroyed() || isAppQuitting || isRecovering || isApplyingSettings) {
     return;
   }
 
@@ -97,7 +108,7 @@ function scheduleUnresponsiveRecovery(win) {
   win.__pendingUnresponsiveRecoveryTimer = setTimeout(() => {
     win.__pendingUnresponsiveRecoveryTimer = null;
 
-    if (!win || win.isDestroyed() || isAppQuitting || isRecovering) {
+    if (!win || win.isDestroyed() || isAppQuitting || isRecovering || isApplyingSettings) {
       return;
     }
 
@@ -223,6 +234,10 @@ function getCookiesFilePath() {
   return path.join(app.getPath('userData'), 'cookies.json');
 }
 
+function getSettingsFilePath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
 function getAutoLoginConfigPath() {
   return path.join(app.getPath('userData'), 'auto-login.json');
 }
@@ -255,11 +270,13 @@ function focusWindow(win) {
 }
 
 function focusExistingPrimaryWindow() {
-  const targetWindow = recoveryWindow && !recoveryWindow.isDestroyed()
-    ? recoveryWindow
-    : mainWindow && !mainWindow.isDestroyed()
-      ? mainWindow
-      : null;
+  const targetWindow = settingsWindow && !settingsWindow.isDestroyed()
+    ? settingsWindow
+    : recoveryWindow && !recoveryWindow.isDestroyed()
+      ? recoveryWindow
+      : mainWindow && !mainWindow.isDestroyed()
+        ? mainWindow
+        : null;
 
   focusWindow(targetWindow);
 }
@@ -394,7 +411,7 @@ function appendSelfCheckLog(reason, details = {}) {
 }
 
 function handleManagedServerExit(details) {
-  if (isAppQuitting) {
+  if (isAppQuitting || isApplyingSettings) {
     return;
   }
 
@@ -943,6 +960,237 @@ function registerRecoveryIpc() {
   });
 }
 
+function getLoginExecutablePath() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+
+function getLoginItemOptions() {
+  return {
+    path: getLoginExecutablePath(),
+    args: [],
+  };
+}
+
+function getOpenAtLoginState() {
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    return currentSettings.openAtLogin;
+  }
+
+  return app.getLoginItemSettings(getLoginItemOptions()).openAtLogin;
+}
+
+function applyLoginItemSettings(openAtLogin) {
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    return;
+  }
+
+  app.setLoginItemSettings({
+    ...getLoginItemOptions(),
+    name: appUserModelId,
+    openAtLogin: Boolean(openAtLogin),
+  });
+}
+
+function getSettingsPayload(settings = currentSettings) {
+  return {
+    ...settings,
+    managedMode: Boolean(runtimeManager?.isManagedMode()),
+    accessUrls: runtimeManager?.getAccessUrls() || [],
+  };
+}
+
+function createSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    focusWindow(settingsWindow);
+    return settingsWindow;
+  }
+
+  const win = new BrowserWindow({
+    width: 590,
+    height: 610,
+    show: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    autoHideMenuBar: true,
+    title: 'ThermalFS 設定',
+    backgroundColor: '#eef3f7',
+    webPreferences: {
+      preload: path.join(__dirname, 'settings-preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  win.removeMenu();
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+  });
+  win.on('close', (event) => {
+    if (isApplyingSettings && !isAppQuitting) {
+      event.preventDefault();
+    }
+  });
+  win.on('closed', () => {
+    if (settingsWindow === win) {
+      settingsWindow = null;
+    }
+  });
+  settingsWindow = win;
+  void win.loadFile(path.join(__dirname, 'settings.html'));
+  return win;
+}
+
+async function confirmManagedServerRestart() {
+  const owner = settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : undefined;
+  const result = await dialog.showMessageBox(owner, {
+    type: 'question',
+    title: '重新啟動前端服務',
+    message: 'LAN 或 Server port 已變更',
+    detail: '套用設定需要重新啟動內建前端服務，主畫面會暫時關閉並在服務就緒後重新載入。是否繼續？',
+    buttons: ['重新啟動並套用', '取消'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  return result.response === 0;
+}
+
+async function restoreAfterSettingsFailure(previousSettings, previousWindowState, shouldRestartServer) {
+  let restoredUrl = runtimeManager?.getStartUrl() || startUrl;
+  if (shouldRestartServer && runtimeManager?.isManagedMode()) {
+    restoredUrl = await runtimeManager.restartWithConfig(previousSettings);
+  }
+
+  applyLoginItemSettings(previousSettings.openAtLogin);
+  currentSettings = saveSettings(getSettingsFilePath(), previousSettings);
+  updateStartUrl(restoredUrl);
+
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow(
+      previousWindowState.frameless,
+      previousWindowState.bounds,
+      restoredUrl
+    );
+  }
+}
+
+async function saveSettingsFromRenderer(value) {
+  const previousSettings = { ...currentSettings };
+  const requestedSettings = validateSettings(value);
+  const managedMode = Boolean(runtimeManager?.isManagedMode());
+  const nextSettings = managedMode
+    ? requestedSettings
+    : {
+        ...requestedSettings,
+        networkMode: previousSettings.networkMode,
+        serverPort: previousSettings.serverPort,
+      };
+  const networkChanged = managedMode && (
+    nextSettings.networkMode !== previousSettings.networkMode
+    || nextSettings.serverPort !== previousSettings.serverPort
+  );
+
+  if (networkChanged && !(await confirmManagedServerRestart())) {
+    return {
+      ok: false,
+      cancelled: true,
+      settings: getSettingsPayload(previousSettings),
+    };
+  }
+
+  const previousWindowState = {
+    frameless: isMiniMode,
+    bounds: mainWindow && !mainWindow.isDestroyed()
+      ? mainWindow.getBounds()
+      : lastNormalBounds,
+  };
+  let networkApplied = false;
+  isApplyingSettings = true;
+
+  try {
+    let nextUrl = runtimeManager?.getStartUrl() || startUrl;
+    if (networkChanged) {
+      if (isRecovering) {
+        closeRecoveryWindow(true);
+        resetRecoveryState();
+      }
+      const previousWindow = mainWindow;
+      mainWindow = null;
+      destroyWindowSilently(previousWindow);
+      nextUrl = await runtimeManager.restartWithConfig(nextSettings);
+      networkApplied = true;
+      updateStartUrl(nextUrl);
+    }
+
+    applyLoginItemSettings(nextSettings.openAtLogin);
+    currentSettings = saveSettings(getSettingsFilePath(), nextSettings);
+
+    if (networkChanged) {
+      createWindow(previousWindowState.frameless, previousWindowState.bounds, nextUrl);
+    }
+    refreshTrayMenu();
+    return {
+      ok: true,
+      serverRestarted: networkChanged,
+      settings: getSettingsPayload(currentSettings),
+    };
+  } catch (error) {
+    console.error('Failed to apply settings:', error);
+    try {
+      await restoreAfterSettingsFailure(
+        previousSettings,
+        previousWindowState,
+        networkApplied
+      );
+    } catch (restoreError) {
+      console.error('Failed to restore settings:', restoreError);
+      appendSelfCheckLog('settings-rollback-failed', {
+        message: error.message,
+        rollbackMessage: restoreError.message,
+      });
+    }
+    return {
+      ok: false,
+      message: error.rollbackError
+        ? `無法套用新設定，也無法恢復原服務：${error.rollbackError.message}`
+        : `無法套用設定，已恢復原設定：${error.message}`,
+      settings: getSettingsPayload(currentSettings),
+    };
+  } finally {
+    isApplyingSettings = false;
+  }
+}
+
+function registerSettingsIpc() {
+  const isSettingsSender = (event) => Boolean(
+    settingsWindow
+    && !settingsWindow.isDestroyed()
+    && event.sender === settingsWindow.webContents
+  );
+
+  ipcMain.handle('settings:get', (event) => {
+    if (!isSettingsSender(event)) {
+      throw new Error('未授權的設定讀取要求。');
+    }
+    return getSettingsPayload();
+  });
+  ipcMain.handle('settings:save', async (event, value) => {
+    if (!isSettingsSender(event)) {
+      throw new Error('未授權的設定儲存要求。');
+    }
+    return saveSettingsFromRenderer(value);
+  });
+  ipcMain.handle('settings:cancel', (event) => {
+    if (isSettingsSender(event)) {
+      settingsWindow.close();
+    }
+  });
+}
+
 function applyPresentationMode(win) {
   if (!win || win.isDestroyed()) {
     return;
@@ -1012,7 +1260,7 @@ function restartWindow(frameless = isMiniMode, bounds = null, targetUrl = null) 
 }
 
 function startSelfCheckRecovery(reason, details = {}) {
-  if (isAppQuitting || isRecovering) {
+  if (isAppQuitting || isRecovering || isApplyingSettings) {
     return;
   }
 
@@ -1212,6 +1460,10 @@ function createAppMenu() {
       label: '系統',
       submenu: [
         {
+          label: '設定',
+          click: () => createSettingsWindow(),
+        },
+        {
           label: '監測系統',
           click: () => createMonitoringWindow(),
         },
@@ -1314,6 +1566,12 @@ function buildTrayMenu() {
         createMonitoringWindow();
       },
     },
+    {
+      label: '\u8a2d\u5b9a',
+      click: () => {
+        createSettingsWindow();
+      },
+    },
     { type: 'separator' },
     {
       label: '\u95dc\u65bc',
@@ -1364,6 +1622,12 @@ function createTray() {
 function createContextMenu() {
   const menu = new Menu();
 
+  menu.append(new MenuItem({
+    label: '設定',
+    click: () => {
+      createSettingsWindow();
+    },
+  }));
   menu.append(new MenuItem({
     label: '監測系統',
     click: () => {
@@ -1475,7 +1739,9 @@ function wireWindowEvents(win) {
     refreshTrayMenu();
   });
   win.on('unresponsive', () => {
-    scheduleUnresponsiveRecovery(win);
+    if (!isApplyingSettings) {
+      scheduleUnresponsiveRecovery(win);
+    }
   });
   win.on('responsive', () => {
     clearPendingUnresponsiveRecovery(win);
@@ -1526,10 +1792,12 @@ function wireWindowEvents(win) {
     await handleAutoLoginForUrl(win, url);
   });
   win.webContents.on('render-process-gone', (_event, details) => {
-    startSelfCheckRecovery('render-process-gone', details);
+    if (!isApplyingSettings) {
+      startSelfCheckRecovery('render-process-gone', details);
+    }
   });
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) {
+    if (!isApplyingSettings && isMainFrame && errorCode !== -3) {
       startSelfCheckRecovery('did-fail-load', {
         errorCode,
         errorDescription,
@@ -1615,18 +1883,28 @@ if (hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     registerRecoveryIpc();
+    registerSettingsIpc();
+    currentSettings = readSettings(getSettingsFilePath(), createDefaultSettings());
+    try {
+      currentSettings.openAtLogin = getOpenAtLoginState();
+      currentSettings = saveSettings(getSettingsFilePath(), currentSettings);
+    } catch (error) {
+      console.error('Failed to synchronize login item settings:', error);
+    }
     migrateLegacySessionData();
     await loadCookies();
     await clearAuthCookieForStartup();
     registerCookiePersistence();
-    createTray();
     runtimeManager = new NuxtRuntimeManager({
       app,
+      networkMode: currentSettings.networkMode,
+      serverPort: currentSettings.serverPort,
       onServerExit: handleManagedServerExit,
       onLog: (message) => {
         console.log(message);
       },
     });
+    createTray();
 
     try {
       const initialUrl = await resolveAppStartUrl({
@@ -1649,6 +1927,10 @@ if (hasSingleInstanceLock) {
     await monitoringManager.init();
 
     app.on('activate', async () => {
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.focus();
+        return;
+      }
       if (recoveryWindow && !recoveryWindow.isDestroyed()) {
         recoveryWindow.focus();
         return;
@@ -1692,10 +1974,13 @@ if (hasSingleInstanceLock) {
     if (recoveryWindow && !recoveryWindow.isDestroyed()) {
       recoveryWindow.__allowClose = true;
     }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.close();
+    }
   });
 
   app.on('window-all-closed', () => {
-    if (isRecovering) {
+    if (isRecovering || isApplyingSettings) {
       return;
     }
 

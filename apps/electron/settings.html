@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ThermalFS 設定</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --accent: #0f3b46;
+        --accent-soft: #dcebed;
+        --background: #eef3f7;
+        --surface: #ffffff;
+        --text: #182026;
+        --muted: #64717c;
+        --border: #d4dee5;
+        --danger: #a62929;
+        --success: #14723f;
+        --warning-bg: #fff6d9;
+        --warning-text: #714d00;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--text);
+        background: linear-gradient(180deg, #f8fbfc 0%, var(--background) 100%);
+        font-family: "Segoe UI", "Microsoft JhengHei UI", sans-serif;
+      }
+      main { padding: 26px 28px 24px; }
+      h1 { margin: 0; font-size: 23px; }
+      .intro {
+        margin: 7px 0 20px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .panel {
+        padding: 17px 18px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: 0 8px 24px rgba(25, 50, 60, .05);
+      }
+      .check {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 0;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.4;
+      }
+      .check + .check { margin-top: 17px; }
+      .check input {
+        flex: 0 0 auto;
+        width: 17px;
+        height: 17px;
+        margin-top: 1px;
+        accent-color: var(--accent);
+      }
+      .port-row {
+        display: grid;
+        grid-template-columns: 1fr 150px;
+        align-items: center;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .port-row label { font-size: 14px; font-weight: 700; }
+      input[type="number"] {
+        width: 100%;
+        height: 40px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0 11px;
+        font: inherit;
+      }
+      input[type="number"]:focus {
+        border-color: var(--accent);
+        outline: 3px solid rgba(15, 59, 70, .12);
+      }
+      input:disabled { cursor: not-allowed; opacity: .55; }
+      .network-summary {
+        margin-top: 17px;
+        padding: 11px 12px;
+        border-radius: 8px;
+        color: var(--muted);
+        background: #f2f6f8;
+        font-size: 12px;
+        line-height: 1.55;
+        word-break: break-all;
+        white-space: pre-line;
+      }
+      .network-summary strong { color: var(--text); }
+      .warning {
+        margin: 14px 0 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: var(--warning-text);
+        background: var(--warning-bg);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .status {
+        min-height: 20px;
+        margin: 14px 0 8px;
+        color: var(--danger);
+        font-size: 13px;
+      }
+      .status.success { color: var(--success); }
+      .actions { display: flex; justify-content: flex-end; gap: 10px; }
+      button {
+        min-width: 92px;
+        min-height: 38px;
+        border: 0;
+        border-radius: 8px;
+        padding: 0 15px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary { color: var(--accent); background: var(--accent-soft); }
+      button.primary { color: #fff; background: var(--accent); }
+      button:disabled { cursor: wait; opacity: .6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>基本設定</h1>
+      <p class="intro">管理 Windows 開機啟動，以及 ThermalFS 內建前端服務的連線範圍與連接埠。</p>
+      <form id="settingsForm">
+        <section class="panel">
+          <label class="check" for="openAtLogin">
+            <input id="openAtLogin" type="checkbox" />
+            <span>Windows 登入時自動啟動 ThermalFS</span>
+          </label>
+          <label class="check" for="allowLan">
+            <input id="allowLan" type="checkbox" />
+            <span>允許區域網路（LAN）內的其他裝置連線</span>
+          </label>
+          <div class="port-row">
+            <label for="serverPort">前端 Server port</label>
+            <input id="serverPort" type="number" min="1" max="65535" step="1" required />
+          </div>
+          <div id="networkSummary" class="network-summary"></div>
+          <p id="externalModeNotice" class="warning" hidden>
+            目前使用 ELECTRON_START_URL 外部服務模式，LAN 與 port 設定不會套用到外部服務。
+          </p>
+          <p class="warning">
+            開放 LAN 後，Windows Firewall 仍需允許所選 TCP port；本程式不會自動修改防火牆規則。
+          </p>
+        </section>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <div class="actions">
+          <button id="cancelButton" class="secondary" type="button">取消</button>
+          <button id="saveButton" class="primary" type="submit">儲存設定</button>
+        </div>
+      </form>
+    </main>
+    <script>
+      const form = document.getElementById('settingsForm');
+      const openAtLogin = document.getElementById('openAtLogin');
+      const allowLan = document.getElementById('allowLan');
+      const serverPort = document.getElementById('serverPort');
+      const networkSummary = document.getElementById('networkSummary');
+      const externalModeNotice = document.getElementById('externalModeNotice');
+      const status = document.getElementById('status');
+      const saveButton = document.getElementById('saveButton');
+      const cancelButton = document.getElementById('cancelButton');
+      let managedMode = true;
+
+      function setStatus(message, success = false) {
+        status.textContent = message || '';
+        status.classList.toggle('success', success);
+      }
+
+      function setBusy(busy) {
+        saveButton.disabled = busy;
+        cancelButton.disabled = busy;
+        saveButton.textContent = busy ? '套用中…' : '儲存設定';
+      }
+
+      function updateSummary(accessUrls = []) {
+        const mode = allowLan.checked ? 'LAN' : '僅限本機';
+        const port = serverPort.value || '—';
+        const fallbackUrl = `http://127.0.0.1:${port}`;
+        const urls = accessUrls.length > 0 ? accessUrls : [fallbackUrl];
+        networkSummary.textContent = `模式：${mode}　Port：${port}\n連線網址：${urls.join('、')}`;
+      }
+
+      window.thermalSettings.get().then((payload) => {
+        openAtLogin.checked = Boolean(payload.openAtLogin);
+        allowLan.checked = payload.networkMode === 'lan';
+        serverPort.value = String(payload.serverPort || 3000);
+        managedMode = Boolean(payload.managedMode);
+        allowLan.disabled = !managedMode;
+        serverPort.disabled = !managedMode;
+        externalModeNotice.hidden = managedMode;
+        updateSummary(payload.accessUrls || []);
+      }).catch((error) => setStatus(error.message));
+
+      allowLan.addEventListener('change', () => updateSummary());
+      serverPort.addEventListener('input', () => updateSummary());
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatus('');
+        setBusy(true);
+        try {
+          const result = await window.thermalSettings.save({
+            openAtLogin: openAtLogin.checked,
+            networkMode: allowLan.checked ? 'lan' : 'local',
+            serverPort: Number(serverPort.value),
+          });
+          if (!result.ok) {
+            setStatus(result.cancelled ? '' : (result.message || '無法儲存設定。'));
+            return;
+          }
+          updateSummary(result.settings.accessUrls || []);
+          setStatus(result.serverRestarted ? '設定已儲存，前端服務已重新啟動。' : '設定已儲存。', true);
+          setTimeout(() => window.close(), 500);
+        } catch (error) {
+          setStatus(error.message || '無法儲存設定。');
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      cancelButton.addEventListener('click', () => window.thermalSettings.cancel());
+    </script>
+  </body>
+</html>

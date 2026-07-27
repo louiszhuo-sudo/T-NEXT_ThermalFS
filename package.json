@@ -1,6 +1,6 @@
 {
   "name": "thermalfs-donghe",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "ThermalFS Donghe Electron desktop runtime and Nuxt application.",
   "author": "YST",
   "type": "module",
@@ -18,6 +18,7 @@
     "generate": "node scripts/run-nuxt.cjs generate",
     "pack:win": "node scripts/pack-win.cjs",
     "preview": "node scripts/run-nuxt.cjs preview",
+    "test": "node --test test/*.test.cjs",
     "postinstall": "node scripts/run-nuxt.cjs prepare"
   },
   "build": {
@@ -56,7 +57,13 @@
       "useZip": true
     },
     "nsis": {
-      "artifactName": "ThermalFS Setup ${version}.${ext}"
+      "artifactName": "ThermalFS Setup ${version}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "include": "build/installer.nsh",
+      "installerLanguages": [
+        "zh_TW"
+      ]
     }
   },
   "dependencies": {

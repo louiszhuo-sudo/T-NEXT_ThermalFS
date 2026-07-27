@@ -8,6 +8,7 @@ const { spawn } = require('child_process');
 
 const DEFAULT_DEV_URL = 'http://127.0.0.1:3000';
 const DEFAULT_PROD_PORTS = [3000];
+const DEFAULT_SERVER_PORT = 3000;
 const DEFAULT_LOCAL_HOST = '127.0.0.1';
 const DEFAULT_LAN_BIND_HOST = '0.0.0.0';
 const DEFAULT_NETWORK_MODE = 'lan';
@@ -80,23 +81,37 @@ function normalizeNetworkMode(value) {
     : DEFAULT_NETWORK_MODE;
 }
 
-function resolveNetworkMode() {
-  return normalizeNetworkMode(process.env.THERMALFS_NETWORK_MODE);
+function normalizeServerPort(value, fallback = DEFAULT_SERVER_PORT) {
+  const port = typeof value === 'string' && value.trim() !== ''
+    ? Number(value)
+    : value;
+  return Number.isInteger(port) && port >= 1 && port <= 65535
+    ? port
+    : fallback;
 }
 
-function resolveServerBindHost() {
-  const explicitHost = String(process.env.THERMALFS_SERVER_HOST || '').trim();
+function resolveNetworkMode(value = process.env.THERMALFS_NETWORK_MODE) {
+  return normalizeNetworkMode(value);
+}
+
+function resolveServerBindHost(networkMode, options = {}) {
+  const shouldUseEnvironment = networkMode === undefined && options.useEnvironment !== false;
+  const explicitHost = shouldUseEnvironment
+    ? String(process.env.THERMALFS_SERVER_HOST || '').trim()
+    : '';
   if (explicitHost) {
     return explicitHost;
   }
 
-  return resolveNetworkMode() === 'lan'
+  return resolveNetworkMode(networkMode) === 'lan'
     ? DEFAULT_LAN_BIND_HOST
     : DEFAULT_LOCAL_HOST;
 }
 
-function resolveServerConnectHost(bindHost = resolveServerBindHost()) {
-  const explicitHost = String(process.env.THERMALFS_SERVER_CONNECT_HOST || '').trim();
+function resolveServerConnectHost(bindHost = resolveServerBindHost(), options = {}) {
+  const explicitHost = options.useEnvironment === false
+    ? ''
+    : String(process.env.THERMALFS_SERVER_CONNECT_HOST || '').trim();
   if (explicitHost) {
     return explicitHost;
   }
@@ -177,14 +192,19 @@ class NuxtRuntimeManager {
     this.onLog = options.onLog || (() => {});
     this.externalStartUrl = String(process.env.ELECTRON_START_URL || '').trim();
     this.startTimeoutMs = Number(process.env.THERMALFS_START_TIMEOUT_MS || DEFAULT_START_TIMEOUT_MS);
-    this.bindHost = resolveServerBindHost();
-    this.connectHost = resolveServerConnectHost(this.bindHost);
-    this.networkMode = resolveNetworkMode();
+    this.networkMode = DEFAULT_NETWORK_MODE;
+    this.serverPort = DEFAULT_SERVER_PORT;
+    this.bindHost = DEFAULT_LAN_BIND_HOST;
+    this.connectHost = DEFAULT_LOCAL_HOST;
     this.child = null;
     this.currentUrl = this.externalStartUrl || '';
     this.currentPort = null;
     this.pendingStart = null;
     this.isQuitting = false;
+    this.configureNetwork({
+      networkMode: options.networkMode ?? process.env.THERMALFS_NETWORK_MODE,
+      serverPort: options.serverPort ?? process.env.THERMALFS_SERVER_PORT,
+    });
   }
 
   isManagedMode() {
@@ -197,6 +217,34 @@ class NuxtRuntimeManager {
 
   getHealthUrl(targetUrl = this.getStartUrl()) {
     return new URL('/api/health', targetUrl).toString();
+  }
+
+  getNetworkConfig() {
+    return {
+      networkMode: this.networkMode,
+      serverPort: this.serverPort,
+    };
+  }
+
+  getAccessUrls() {
+    if (!this.isManagedMode()) {
+      return this.externalStartUrl ? [this.externalStartUrl] : [];
+    }
+    return listNetworkAccessUrls(this.serverPort, {
+      bindHost: this.bindHost,
+      connectHost: this.connectHost,
+    });
+  }
+
+  configureNetwork(value = {}) {
+    this.networkMode = resolveNetworkMode(value.networkMode);
+    this.serverPort = normalizeServerPort(value.serverPort);
+    this.bindHost = resolveServerBindHost(this.networkMode, { useEnvironment: false });
+    this.connectHost = resolveServerConnectHost(this.bindHost, { useEnvironment: false });
+    if (this.isManagedMode()) {
+      this.currentUrl = `http://${this.connectHost}:${this.serverPort}`;
+    }
+    return this.getNetworkConfig();
   }
 
   markAppQuitting() {
@@ -229,6 +277,31 @@ class NuxtRuntimeManager {
 
   async restart() {
     return this.ensureStarted({ restart: true });
+  }
+
+  async restartWithConfig(nextConfig) {
+    if (!this.isManagedMode()) {
+      return this.externalStartUrl;
+    }
+
+    const previousConfig = this.getNetworkConfig();
+    await this.stop();
+    this.configureNetwork(nextConfig);
+
+    try {
+      return await this.ensureStarted();
+    } catch (error) {
+      this.onLog(`[nitro] Failed to apply network settings: ${error.message}`);
+      await this.stop();
+      this.configureNetwork(previousConfig);
+      try {
+        await this.ensureStarted();
+      } catch (rollbackError) {
+        error.rollbackError = rollbackError;
+        this.onLog(`[nitro] Failed to restore previous network settings: ${rollbackError.message}`);
+      }
+      throw error;
+    }
   }
 
   async stop() {
@@ -293,12 +366,7 @@ class NuxtRuntimeManager {
   }
 
   resolvePortCandidates() {
-    const envPort = Number(process.env.THERMALFS_SERVER_PORT || 0);
-    if (Number.isInteger(envPort) && envPort > 0) {
-      return [envPort];
-    }
-
-    return [...DEFAULT_PROD_PORTS];
+    return [this.serverPort];
   }
 
   async startManagedServer() {
@@ -385,12 +453,16 @@ class NuxtRuntimeManager {
 
 module.exports = {
   DEFAULT_DEV_URL,
+  DEFAULT_LAN_BIND_HOST,
   DEFAULT_LOCAL_HOST,
   DEFAULT_NETWORK_MODE,
   DEFAULT_PROD_PORTS,
+  DEFAULT_SERVER_PORT,
   DEFAULT_START_TIMEOUT_MS,
   NuxtRuntimeManager,
   listNetworkAccessUrls,
+  normalizeNetworkMode,
+  normalizeServerPort,
   probeHealthUrl,
   resolveNetworkMode,
   resolveServerBindHost,
