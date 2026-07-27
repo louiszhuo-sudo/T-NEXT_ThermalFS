@@ -391,23 +391,11 @@ const waterCannonPreviews = computed(() => {
 })
 const waterCannonPumpDisplay = computed(() => {
     const value = Number(waterCannonSystemStatus.value.waterJet_pump_status)
-    if (value === 1) {
-        return { label: '啟動', isAlert: false }
-    }
-    if (value === 0) {
-        return { label: '停止', isAlert: true }
-    }
-    return { label: '--', isAlert: false }
+    return { label: '啟動', isAlert: value === 1 }
 })
 const waterCannonWaterLevelDisplay = computed(() => {
     const value = Number(waterCannonSystemStatus.value.waterJet_waterLow_status)
-    if (value === 1) {
-        return { label: '低水位', isAlert: true }
-    }
-    if (value === 0) {
-        return { label: '正常水位', isAlert: false }
-    }
-    return { label: '--', isAlert: false }
+    return { label: '低水位', isAlert: value === 1 }
 })
 const getWaterCannonDisplayName = (status) => {
     const name = String(status?.waterJet_name ?? status?.waterJet_id ?? '').trim()
@@ -1546,7 +1534,11 @@ onBeforeUnmount(() => {
 }
 
 .direction-pad.is-disabled {
-    opacity: .55;
+    opacity: .9;
+}
+
+.direction-pad.is-disabled :deep(.v-btn--disabled) {
+    opacity: 1;
 }
 
 @media (max-width: 720px) {
