@@ -78,6 +78,8 @@
                     <v-btn class="water-cannon-trigger" variant="text" aria-label="開啟水砲控制"
                         @click="waterCannonDialog = true">
                         <img src="/images/fs/water-cannon.png" alt="水砲控制" />
+                        <span v-if="hasWaterCannonAlarm" class="water-cannon-alert-badge"
+                            aria-label="水砲警報">!</span>
                     </v-btn>
                     <v-btn class="header-notification-trigger" icon variant="text" color="black"
                         @click="openSideD()" style="margin-top: -5px">
@@ -372,6 +374,12 @@ const waterCannonList = computed(() => {
     return Object.values(waterCannonStatuses.value)
         .sort((left, right) => Number(left.waterJet_id) - Number(right.waterJet_id))
 })
+const hasWaterCannonAlarm = computed(() => {
+    return waterCannonList.value.some((status) => (
+        Number(status.waterJet_tempeAlarm_status) === 1
+        || Number(status.waterJet_smokeAlarm_status) === 1
+    ))
+})
 const waterCannonPreviews = computed(() => {
     const waterJetId = String(waterCannonId.value)
     return [
@@ -488,7 +496,7 @@ const selectWaterCannon = (waterJetId) => {
     syncSelectedWaterCannonStatus()
 }
 const scheduleWaterCannonStatusReconnect = () => {
-    if (waterCannonStatusReconnectTimer || !waterCannonDialog.value) {
+    if (waterCannonStatusReconnectTimer) {
         return
     }
 
@@ -627,7 +635,6 @@ watch(waterCannonDialog, (isOpen) => {
     if (isOpen) {
         connectWaterCannonStatusSocket()
     } else {
-        closeWaterCannonStatusSocket()
         clearActiveWaterCannonDirection()
     }
 })
@@ -1073,6 +1080,7 @@ const initWs3 = () => {
 }
 onMounted(() => {
     initWs3()
+    connectWaterCannonStatusSocket()
     updateTabItemWidth()
     document.fonts?.ready.then(updateTabItemWidth)
     window.addEventListener('keydown', handleWaterCannonKeyDown)
@@ -1161,6 +1169,27 @@ onBeforeUnmount(() => {
     width: 22px;
     height: 22px;
     object-fit: contain;
+    transform: translateY(2px);
+}
+
+.water-cannon-alert-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    display: flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    color: #fff;
+    background: #d50000;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    box-sizing: border-box;
 }
 
 .water-cannon-dialog {
@@ -1458,7 +1487,7 @@ onBeforeUnmount(() => {
 }
 
 .water-cannon-segmented-control--gate button.is-selected {
-    background: #74c5ff;
+    background: #0095ff;
 }
 
 .water-cannon-segmented-control.is-disabled {
