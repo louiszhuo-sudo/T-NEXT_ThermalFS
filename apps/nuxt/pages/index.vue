@@ -177,71 +177,115 @@
                 </v-card-actions>
             </v-card>
         </v-dialog>
-        <v-dialog v-model="waterCannonDialog" class="water-cannon-dialog-shell" width="1434"
+        <v-dialog v-model="waterCannonDialog" class="water-cannon-dialog-shell" width="1731"
             max-width="calc(100vw - 48px)" scrollable>
             <v-card class="water-cannon-dialog">
-                <div class="water-cannon-dialog__header">
-                    <div>
-                        <h2>水砲控制</h2>
-                        <p>即時控制與影像預覽</p>
-                    </div>
-                    <v-btn icon="mdi-close" variant="text" aria-label="關閉水砲控制"
-                        @click="waterCannonDialog = false" />
-                </div>
-
+                <v-btn class="water-cannon-dialog__close" icon="mdi-close" variant="text" aria-label="關閉水砲控制"
+                    @click="waterCannonDialog = false" />
                 <v-card-text class="water-cannon-dialog__body">
-                    <div class="water-cannon-preview-section">
-                        <div class="water-cannon-preview-grid">
-                            <div v-for="preview in waterCannonPreviews" :key="preview.label"
-                                class="water-cannon-preview">
-                                <ClientOnly>
-                                    <MapOnlyvideo v-if="waterCannonDialog" class="water-cannon-preview__video"
-                                        :stream-url="preview.stream" :camID="preview.id" :camType="preview.type" />
-                                </ClientOnly>
+                    <section class="water-cannon-overview">
+                        <h2>水砲控制</h2>
+                        <div class="water-cannon-device-list">
+                            <button v-for="status in waterCannonList" :key="status.waterJet_id" type="button"
+                                class="water-cannon-device-row"
+                                :aria-pressed="String(status.waterJet_id) === waterCannonId"
+                                @click="selectWaterCannon(status.waterJet_id)">
+                                <span class="water-cannon-device-selector"
+                                    :class="{ 'is-selected': String(status.waterJet_id) === waterCannonId }">
+                                    <span />
+                                </span>
+                                <span class="water-cannon-device-card"
+                                    :class="{ 'is-selected': String(status.waterJet_id) === waterCannonId }">
+                                    <span class="water-cannon-device-card__title">
+                                        {{ getWaterCannonDisplayName(status) }}
+                                    </span>
+                                    <span class="water-cannon-device-statuses">
+                                        <span
+                                            :class="{ 'is-active': isWaterCannonStatusActive(status, 'waterJet_gate_status') }">
+                                            水閘啟動
+                                        </span>
+                                        <span
+                                            :class="{ 'is-active': isWaterCannonStatusActive(status, 'waterJet_tempeAlarm_status') }">
+                                            溫度異常
+                                        </span>
+                                        <span
+                                            :class="{ 'is-active': isWaterCannonStatusActive(status, 'waterJet_smokeAlarm_status') }">
+                                            煙霧偵測
+                                        </span>
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div class="water-cannon-system-status">
+                            <h3>系統狀態</h3>
+                            <div class="water-cannon-system-status__items">
+                                <div class="water-cannon-system-card">
+                                    <span class="water-cannon-system-card__title">加壓馬達</span>
+                                    <span class="water-cannon-system-card__value"
+                                        :class="{ 'is-alert': waterCannonPumpDisplay.isAlert }">
+                                        {{ waterCannonPumpDisplay.label }}
+                                    </span>
+                                </div>
+                                <div class="water-cannon-system-card">
+                                    <span class="water-cannon-system-card__title">水位</span>
+                                    <span class="water-cannon-system-card__value"
+                                        :class="{ 'is-alert': waterCannonWaterLevelDisplay.isAlert }">
+                                        {{ waterCannonWaterLevelDisplay.label }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        <div class="water-cannon-preview-actions">
-                            <span :class="{ 'water-cannon-countdown--empty': waterCannonCountdown <= 0 }">{{
-                                waterCannonCountdown > 0
-                                ? `倒數 ${waterCannonCountdown} 秒後，自動啟動水砲`
-                                : '--' }}</span>
-                            <v-btn v-if="waterCannonCountdown > 0" color="#ff6868" variant="flat"
-                                @click="triggerWaterCannon">立即啟動</v-btn>
-                        </div>
-                    </div>
+                    </section>
 
-                    <div class="water-cannon-controls">
-                        <label>
-                            <span>水砲</span>
-                            <v-select v-model="waterCannonId" density="compact" hide-details :items="waterCannonIds"
-                                @update:model-value="selectWaterCannon" />
-                        </label>
-                        <label>
-                            <span>模式</span>
-                            <v-select v-model="waterCannonMode" class="water-cannon-state-select"
-                                :class="waterCannonMode === '自動' ? 'is-green' : 'is-red'" density="compact"
-                                hide-details :items="waterCannonModes" @update:model-value="setWaterCannonMode">
-                                <template #item="{ props, item }">
-                                    <v-list-item v-bind="props" class="water-cannon-select-option"
-                                        :class="item.raw === '自動' ? 'is-green' : 'is-red'" />
-                                </template>
-                            </v-select>
-                        </label>
-                        <label>
-                            <span>閘門</span>
-                            <v-select v-model="waterCannonGate" class="water-cannon-state-select"
-                                :class="waterCannonGate === '開' ? 'is-red' : 'is-green'" density="compact"
-                                hide-details :items="waterCannonGates" :disabled="waterCannonMode === '自動'"
-                                @update:model-value="setWaterCannonGate">
-                                <template #item="{ props, item }">
-                                    <v-list-item v-bind="props" class="water-cannon-select-option"
-                                        :class="item.raw === '開' ? 'is-red' : 'is-green'" />
-                                </template>
-                            </v-select>
-                        </label>
+                    <section class="water-cannon-preview-section">
+                        <div v-for="preview in waterCannonPreviews" :key="preview.key"
+                            class="water-cannon-preview">
+                            <ClientOnly>
+                                <MapOnlyvideo v-if="waterCannonDialog" class="water-cannon-preview__video"
+                                    :stream-url="preview.stream" :camID="preview.camID" :camType="preview.type" />
+                            </ClientOnly>
+                        </div>
+                        <div v-if="waterCannonCountdown > 0" class="water-cannon-countdown-overlay">
+                            <span>倒數 {{ waterCannonCountdown }} 秒後，自動啟動水砲</span>
+                            <v-btn color="#ff4f4f" variant="flat" @click="triggerWaterCannon">立即啟動</v-btn>
+                        </div>
+                    </section>
+
+                    <section class="water-cannon-controls">
+                        <div class="water-cannon-control-group">
+                            <h3>模式</h3>
+                            <div class="water-cannon-segmented-control">
+                                <button type="button" :class="{ 'is-selected': waterCannonMode === '自動' }"
+                                    :aria-pressed="waterCannonMode === '自動'" @click="setWaterCannonMode('自動')">
+                                    自動
+                                </button>
+                                <button type="button" :class="{ 'is-selected': waterCannonMode === '手動' }"
+                                    :aria-pressed="waterCannonMode === '手動'" @click="setWaterCannonMode('手動')">
+                                    手動
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="water-cannon-control-group">
+                            <h3>閘門</h3>
+                            <div class="water-cannon-segmented-control water-cannon-segmented-control--gate"
+                                :class="{ 'is-disabled': waterCannonMode === '自動' }">
+                                <button type="button" :class="{ 'is-selected': waterCannonGate === '開' }"
+                                    :aria-pressed="waterCannonGate === '開'" :disabled="waterCannonMode === '自動'"
+                                    @click="setWaterCannonGate('開')">
+                                    開
+                                </button>
+                                <button type="button" :class="{ 'is-selected': waterCannonGate === '關' }"
+                                    :aria-pressed="waterCannonGate === '關'" :disabled="waterCannonMode === '自動'"
+                                    @click="setWaterCannonGate('關')">
+                                    關
+                                </button>
+                            </div>
+                        </div>
 
                         <div class="water-cannon-direction">
-                            <span>方向控制</span>
+                            <h3>方向控制</h3>
                             <div class="direction-pad" :class="{ 'is-disabled': waterCannonMode === '自動' }">
                                 <v-btn class="direction-pad__up" icon="mdi-chevron-up" variant="tonal"
                                     :class="{ 'is-keyboard-pressed': activeWaterCannonDirections.includes('上') }"
@@ -269,7 +313,7 @@
                                     @pointerleave="stopWaterCannonDirection('右')" />
                             </div>
                         </div>
-                    </div>
+                    </section>
                 </v-card-text>
             </v-card>
         </v-dialog>
@@ -320,22 +364,56 @@ const waterCannonDialog = ref(false)
 const waterCannonId = ref('1')
 const waterCannonMode = ref('手動')
 const waterCannonGate = ref('關')
-const waterCannonCountdown = ref(20)
+const waterCannonCountdown = ref(0)
 const activeWaterCannonDirections = ref([])
+const waterCannonSystemStatus = ref({})
 const waterCannonStatuses = ref({})
-const waterCannonIds = computed(() => {
-    const ids = Object.keys(waterCannonStatuses.value)
-        .sort((left, right) => Number(left) - Number(right))
-    return ids.length ? ids : ['1']
+const waterCannonList = computed(() => {
+    return Object.values(waterCannonStatuses.value)
+        .sort((left, right) => Number(left.waterJet_id) - Number(right.waterJet_id))
 })
-const waterCannonModes = ['自動', '手動']
-const waterCannonGates = ['關', '開']
-const waterCannonPreviews = [
-    { id: 'water-cannon-ir1', type: 'ir', label: '熱像 1', stream: 'rtsp://localhost:8889/video/realtime/ir1' },
-    { id: 'water-cannon-vis1', type: 'vis', label: '可見光 1', stream: 'rtsp://localhost:8889/video/realtime/vis1' },
-    { id: 'water-cannon-ir2', type: 'ir', label: '熱像 2', stream: 'rtsp://localhost:8889/video/realtime/ir2' },
-    { id: 'water-cannon-vis2', type: 'vis', label: '可見光 2', stream: 'rtsp://localhost:8889/video/realtime/vis2' }
-]
+const waterCannonPreviews = computed(() => {
+    const waterJetId = String(waterCannonId.value)
+    return [
+        {
+            key: `water-cannon-ir-${waterJetId}`,
+            camID: waterJetId,
+            type: 'ir',
+            stream: `rtsp://localhost:8889/video/realtime/ir${waterJetId}`
+        },
+        {
+            key: `water-cannon-vis-${waterJetId}`,
+            camID: waterJetId,
+            type: 'vis',
+            stream: `rtsp://localhost:8889/video/realtime/vis${waterJetId}`
+        }
+    ]
+})
+const waterCannonPumpDisplay = computed(() => {
+    const value = Number(waterCannonSystemStatus.value.waterJet_pump_status)
+    if (value === 1) {
+        return { label: '啟動', isAlert: false }
+    }
+    if (value === 0) {
+        return { label: '停止', isAlert: true }
+    }
+    return { label: '--', isAlert: false }
+})
+const waterCannonWaterLevelDisplay = computed(() => {
+    const value = Number(waterCannonSystemStatus.value.waterJet_waterLow_status)
+    if (value === 1) {
+        return { label: '低水位', isAlert: true }
+    }
+    if (value === 0) {
+        return { label: '正常水位', isAlert: false }
+    }
+    return { label: '--', isAlert: false }
+})
+const getWaterCannonDisplayName = (status) => {
+    const name = String(status?.waterJet_name ?? status?.waterJet_id ?? '').trim()
+    return name.startsWith('水砲') ? name : `水砲 ${name}`
+}
+const isWaterCannonStatusActive = (status, field) => Number(status?.[field]) === 1
 const waterCannonDirectionValueMap = {
     左: 1,
     右: 2,
@@ -361,19 +439,55 @@ const syncSelectedWaterCannonStatus = () => {
         waterCannonCountdown.value = Number(status.waterJet_countdown)
     }
 }
-const applyWaterCannonStatus = (content = {}) => {
-    const statuses = content.waterJet_id !== undefined
-        ? [content]
-        : Object.values(content).filter((status) => status?.waterJet_id !== undefined)
+const normalizeWaterCannonStatusEntries = (content) => {
+    let sourceEntries = []
+    if (Array.isArray(content)) {
+        sourceEntries = content
+    } else if (content && typeof content === 'object') {
+        const isDirectStatus = (
+            content.waterJet_id !== undefined
+            || content.waterJet_pump_status !== undefined
+            || content.waterJet_waterLow_status !== undefined
+        )
+        sourceEntries = isDirectStatus ? [content] : Object.values(content)
+    }
+
+    return sourceEntries.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return []
+        }
+        if (
+            entry.waterJet_id !== undefined
+            || entry.waterJet_pump_status !== undefined
+            || entry.waterJet_waterLow_status !== undefined
+        ) {
+            return [entry]
+        }
+        return Object.values(entry).filter((value) => value && typeof value === 'object')
+    })
+}
+const applyWaterCannonStatus = (content = []) => {
+    const entries = normalizeWaterCannonStatusEntries(content)
+    const systemStatus = entries.find((entry) => (
+        entry.waterJet_pump_status !== undefined
+        || entry.waterJet_waterLow_status !== undefined
+    ))
+    const statuses = entries.filter((entry) => entry.waterJet_id !== undefined)
+
+    if (systemStatus) {
+        waterCannonSystemStatus.value = {
+            ...waterCannonSystemStatus.value,
+            ...systemStatus
+        }
+    }
 
     if (!statuses.length) {
         return
     }
 
-    waterCannonStatuses.value = {
-        ...waterCannonStatuses.value,
-        ...Object.fromEntries(statuses.map((status) => [String(status.waterJet_id), status]))
-    }
+    waterCannonStatuses.value = Object.fromEntries(
+        statuses.map((status) => [String(status.waterJet_id), status])
+    )
 
     if (!waterCannonStatuses.value[waterCannonId.value]) {
         waterCannonId.value = String(statuses[0].waterJet_id)
@@ -404,12 +518,7 @@ const connectWaterCannonStatusSocket = () => {
     waterCannonStatusSocket.onmessage = (event) => {
         try {
             const message = JSON.parse(event.data)
-            const statusContent = message.content || message
-            const hasWaterCannonStatus = statusContent.waterJet_id !== undefined
-                || Object.values(statusContent).some((status) => status?.waterJet_id !== undefined)
-            if (message.feature === 'waterJet' || hasWaterCannonStatus) {
-                applyWaterCannonStatus(statusContent)
-            }
+            applyWaterCannonStatus(message.content ?? message)
         } catch {
             // Ignore non-JSON messages from the status server.
         }
@@ -444,6 +553,7 @@ const sendWaterCannonCommand = (method, content = {}) => {
     return false
 }
 const setWaterCannonMode = (mode) => {
+    waterCannonMode.value = mode
     if (mode === '自動') {
         clearActiveWaterCannonDirection()
     }
@@ -453,6 +563,10 @@ const setWaterCannonMode = (mode) => {
     })
 }
 const setWaterCannonGate = (gate) => {
+    if (waterCannonMode.value === '自動') {
+        return
+    }
+    waterCannonGate.value = gate
     sendWaterCannonCommand('set_waterJet_gate', {
         waterJet_id: Number(waterCannonId.value),
         waterJet_gate_status: gate === '開' ? 1 : 0
@@ -1062,70 +1176,223 @@ onBeforeUnmount(() => {
 }
 
 .water-cannon-dialog {
-    width: 1434px;
+    position: relative;
+    width: 1731px;
     max-width: calc(100vw - 48px);
-    min-height: 966px;
-    color: #414141;
+    height: 1003px;
+    max-height: calc(100vh - 48px);
+    overflow: hidden;
+    border: 1px solid #333;
+    color: #585858;
+    box-shadow: 0 4px 4px rgb(0 0 0 / 25%);
 }
 
-.water-cannon-dialog__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 16px 24px 8px;
-    border-bottom: 1px solid #e3e3e3;
-}
-
-.water-cannon-dialog__header h2 {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 600;
-}
-
-.water-cannon-dialog__header p {
-    margin: 4px 0 0;
-    color: #777;
-    font-size: 13px;
+.water-cannon-dialog__close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 10;
 }
 
 .water-cannon-dialog__body {
     display: grid;
-    grid-template-columns: minmax(0, 1032px) 264px;
-    gap: 58px;
-    padding: 10px 38px 14px !important;
+    grid-template-columns: minmax(430px, 540px) minmax(520px, 636px) minmax(360px, 426px);
+    justify-content: center;
+    gap: 24px;
+    width: 100%;
+    height: 100%;
+    padding: 16px 28px 30px !important;
+    overflow: auto;
+    box-sizing: border-box;
 }
 
-.water-cannon-preview-grid {
+.water-cannon-overview {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    padding: 24px 0 8px;
+}
+
+.water-cannon-overview h2,
+.water-cannon-overview h3,
+.water-cannon-controls h3 {
+    margin: 0;
+    font-size: 25px;
+    font-weight: 400;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.water-cannon-device-list {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 20px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.water-cannon-device-row {
+    display: grid;
+    min-width: 0;
+    flex: 0 0 auto;
+    grid-template-columns: 50px minmax(0, 440px);
+    gap: 34px;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.water-cannon-device-selector {
+    display: flex;
+    width: 49px;
+    height: 49px;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #b8b8b8;
+    border-radius: 50%;
+    background: #f7f7f7;
+    box-sizing: border-box;
+}
+
+.water-cannon-device-selector span {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: #c9c9c9;
+}
+
+.water-cannon-device-selector.is-selected span {
+    background: #0095ff;
+}
+
+.water-cannon-device-card {
+    display: flex;
+    height: 141px;
+    flex-direction: column;
+    gap: 5px;
+    padding: 5px;
+    border: 2px solid #b8b8b8;
+    border-radius: 3px;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.water-cannon-device-card.is-selected {
+    padding: 4px;
+    border: 3px solid #0095ff;
+}
+
+.water-cannon-device-card__title {
+    display: flex;
+    min-height: 56px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background: #e6e6e6;
+    font-size: 25px;
+}
+
+.water-cannon-device-statuses {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.water-cannon-device-statuses > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border: 1px solid #b8b8b8;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 22px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.water-cannon-device-statuses > span.is-active {
+    background: #ffcccc;
+}
+
+.water-cannon-system-status {
+    flex: 0 0 auto;
+    margin-top: 28px;
+}
+
+.water-cannon-system-status__items {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 15px;
+    width: 440px;
+    max-width: calc(100% - 84px);
+    margin: 14px 0 0 84px;
+}
+
+.water-cannon-system-card {
+    display: flex;
+    height: 138px;
+    flex-direction: column;
+    gap: 5px;
+    padding: 5px;
+    border: 2px solid #b8b8b8;
+    border-radius: 3px;
+    box-sizing: border-box;
+}
+
+.water-cannon-system-card__title,
+.water-cannon-system-card__value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 24px;
+}
+
+.water-cannon-system-card__title {
+    min-height: 44px;
+    background: #e6e6e6;
+}
+
+.water-cannon-system-card__value {
+    min-height: 0;
+    flex: 1;
+    border: 1px solid #b8b8b8;
+    background: #fff;
+}
+
+.water-cannon-system-card__value.is-alert {
+    background: #ffcccc;
 }
 
 .water-cannon-preview-section {
-    display: flex;
+    position: relative;
+    display: grid;
     min-width: 0;
-    flex-direction: column;
-}
-
-.water-cannon-preview-actions {
-    display: flex;
-    min-height: 52px;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    padding-top: 10px;
-    color: #f44336;
-    font-size: 14px;
-}
-
-.water-cannon-countdown--empty {
-    color: #000;
+    min-height: 0;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 10px;
 }
 
 .water-cannon-preview {
     position: relative;
-    min-height: 390px;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
+    background: #eee;
 }
 
 .water-cannon-preview :deep(.water-cannon-preview__video) {
@@ -1136,59 +1403,114 @@ onBeforeUnmount(() => {
     height: 100%;
 }
 
+.water-cannon-countdown-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 5;
+    display: flex;
+    width: 420px;
+    min-height: 126px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    padding: 18px 24px;
+    background: rgb(255 255 255 / 88%);
+    color: #f44336;
+    font-size: 22px;
+    text-align: center;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+}
+
+.water-cannon-countdown-overlay :deep(.v-btn) {
+    color: #fff;
+    font-size: 20px;
+}
+
 .water-cannon-controls {
     display: flex;
+    min-width: 0;
+    min-height: 0;
     flex-direction: column;
-    gap: 14px;
+    padding-top: 28px;
 }
 
-.water-cannon-controls label,
-.water-cannon-direction {
+.water-cannon-control-group + .water-cannon-control-group {
+    margin-top: 32px;
+}
+
+.water-cannon-segmented-control {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 14px;
-    font-weight: 500;
+    height: 104px;
+    gap: 7px;
+    margin-top: 12px;
+    padding: 5px;
+    border: 2px solid #bebebe;
+    border-radius: 3px;
+    box-sizing: border-box;
 }
 
-.water-cannon-state-select.is-green :deep(.v-select__selection-text) {
-    color: #006400;
-    font-weight: 600;
+.water-cannon-segmented-control button {
+    min-width: 0;
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #b8b8b8;
+    border-radius: 5px;
+    color: #fff;
+    background: #afafaf;
+    cursor: pointer;
+    font: inherit;
+    font-size: 28px;
 }
 
-.water-cannon-state-select.is-red :deep(.v-select__selection-text) {
-    color: #8b0000;
-    font-weight: 600;
+.water-cannon-segmented-control button.is-selected {
+    background: #0095ff;
 }
 
-.water-cannon-state-select.v-input--disabled {
-    opacity: 1;
+.water-cannon-segmented-control--gate button.is-selected {
+    background: #74c5ff;
 }
 
-.water-cannon-select-option.is-green {
-    color: #006400;
-    font-weight: 600;
+.water-cannon-segmented-control.is-disabled {
+    opacity: .65;
 }
 
-.water-cannon-select-option.is-red {
-    color: #8b0000;
-    font-weight: 600;
+.water-cannon-segmented-control button:disabled {
+    cursor: default;
+}
+
+.water-cannon-direction {
+    min-height: 0;
+    flex: 1;
+    margin-top: 32px;
 }
 
 .direction-pad {
     display: grid;
-    grid-template-columns: repeat(3, 84px);
-    grid-template-rows: repeat(2, 84px);
-    gap: 6px;
+    width: 100%;
+    max-height: 423px;
+    aspect-ratio: 426 / 423;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 9px;
     align-items: center;
-    justify-content: start;
+    margin-top: 12px;
+    padding: 14px;
+    border: 2px solid #bebebe;
+    border-radius: 5px;
+    box-sizing: border-box;
 }
 
 .direction-pad :deep(.v-btn) {
-    width: 84px;
-    min-width: 84px;
-    height: 84px;
-    border-radius: 4px;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    border: 1px solid #aaa;
+    border-radius: 5px;
+    color: #999;
+    background: #d7d7d7;
     transition: transform .08s ease, background-color .08s ease, box-shadow .08s ease;
 }
 
@@ -1200,7 +1522,7 @@ onBeforeUnmount(() => {
 }
 
 .direction-pad :deep(.v-icon) {
-    font-size: 36px;
+    font-size: 52px;
 }
 
 .direction-pad :deep(.direction-pad__up) {
@@ -1215,7 +1537,7 @@ onBeforeUnmount(() => {
 
 .direction-pad :deep(.direction-pad__down) {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
 }
 
 .direction-pad :deep(.direction-pad__right) {
