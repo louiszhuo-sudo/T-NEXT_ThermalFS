@@ -1,15 +1,58 @@
 !include nsDialogs.nsh
 !include LogicLib.nsh
+!include FileFunc.nsh
 
 !ifndef BUILD_UNINSTALLER
   Var StartAtLoginCheckbox
   Var StartAtLoginState
+  Var ThermalFsAutostartArgument
 
   !macro customInit
     StrCpy $StartAtLoginState ${BST_UNCHECKED}
+    StrCpy $ThermalFsAutostartArgument ""
     ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.yst.thermalfs.donghe"
     ${If} $0 != ""
       StrCpy $StartAtLoginState ${BST_CHECKED}
+    ${EndIf}
+
+    ${GetParameters} $R0
+    ClearErrors
+    ${GetOptions} $R0 "/THERMALFS_AUTOSTART=" $R1
+    ${IfNot} ${Errors}
+      StrCpy $ThermalFsAutostartArgument $R1
+
+      # The automation override is deliberately limited to silent per-user installs.
+      ${IfNot} ${Silent}
+        DetailPrint "/THERMALFS_AUTOSTART requires /S /currentuser."
+        SetErrorLevel 10
+        Quit
+      ${EndIf}
+
+      ClearErrors
+      ${GetOptions} $R0 "/currentuser" $R2
+      ${If} ${Errors}
+        DetailPrint "/THERMALFS_AUTOSTART requires /currentuser."
+        SetErrorLevel 10
+        Quit
+      ${EndIf}
+
+      ClearErrors
+      ${GetOptions} $R0 "/allusers" $R2
+      ${IfNot} ${Errors}
+        DetailPrint "/THERMALFS_AUTOSTART cannot be combined with /allusers."
+        SetErrorLevel 10
+        Quit
+      ${EndIf}
+
+      ${If} $ThermalFsAutostartArgument == "1"
+        StrCpy $StartAtLoginState ${BST_CHECKED}
+      ${ElseIf} $ThermalFsAutostartArgument == "0"
+        StrCpy $StartAtLoginState ${BST_UNCHECKED}
+      ${Else}
+        DetailPrint "/THERMALFS_AUTOSTART must be 0 or 1."
+        SetErrorLevel 10
+        Quit
+      ${EndIf}
     ${EndIf}
   !macroend
 
