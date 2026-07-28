@@ -418,6 +418,7 @@ const waterCannonDirectionValueMap = {
 }
 let waterCannonStatusSocket = null
 let waterCannonStatusReconnectTimer = null
+const WATER_CANNON_STATUS_RECONNECT_DELAY = 3000
 const createWaterCannonSession = () => Math.random().toString(36).slice(2)
 const syncSelectedWaterCannonStatus = () => {
     const status = waterCannonStatuses.value[waterCannonId.value]
@@ -495,23 +496,46 @@ const selectWaterCannon = (waterJetId) => {
     waterCannonId.value = String(waterJetId)
     syncSelectedWaterCannonStatus()
 }
+const clearWaterCannonStatusReconnectTimer = () => {
+    if (waterCannonStatusReconnectTimer === null) {
+        return
+    }
+
+    clearTimeout(waterCannonStatusReconnectTimer)
+    waterCannonStatusReconnectTimer = null
+}
 const scheduleWaterCannonStatusReconnect = () => {
-    if (waterCannonStatusReconnectTimer) {
+    if (waterCannonStatusReconnectTimer !== null) {
         return
     }
 
     waterCannonStatusReconnectTimer = setTimeout(() => {
         waterCannonStatusReconnectTimer = null
+        if (
+            waterCannonStatusSocket?.readyState === WebSocket.OPEN
+            || waterCannonStatusSocket?.readyState === WebSocket.CONNECTING
+        ) {
+            return
+        }
         connectWaterCannonStatusSocket()
-    }, 3000)
+    }, WATER_CANNON_STATUS_RECONNECT_DELAY)
 }
 const connectWaterCannonStatusSocket = () => {
-    if (!import.meta.client || waterCannonStatusSocket?.readyState === WebSocket.OPEN || waterCannonStatusSocket?.readyState === WebSocket.CONNECTING) {
+    if (!import.meta.client) {
+        return
+    }
+    if (
+        waterCannonStatusSocket?.readyState === WebSocket.OPEN
+        || waterCannonStatusSocket?.readyState === WebSocket.CONNECTING
+    ) {
+        clearWaterCannonStatusReconnectTimer()
         return
     }
 
-    waterCannonStatusSocket = new WebSocket(`ws://${$getIpaddress()}:8710/`)
-    waterCannonStatusSocket.onmessage = (event) => {
+    clearWaterCannonStatusReconnectTimer()
+    const socket = new WebSocket(`ws://${$getIpaddress()}:8710/`)
+    waterCannonStatusSocket = socket
+    socket.onmessage = (event) => {
         try {
             const message = JSON.parse(event.data)
             applyWaterCannonStatus(message.content ?? message)
@@ -519,16 +543,21 @@ const connectWaterCannonStatusSocket = () => {
             // Ignore non-JSON messages from the status server.
         }
     }
-    waterCannonStatusSocket.onclose = () => {
+    socket.onerror = () => {
+        if (socket.readyState !== WebSocket.CLOSED) {
+            socket.close()
+        }
+    }
+    socket.onclose = () => {
+        if (waterCannonStatusSocket !== socket) {
+            return
+        }
         waterCannonStatusSocket = null
         scheduleWaterCannonStatusReconnect()
     }
 }
 const closeWaterCannonStatusSocket = () => {
-    if (waterCannonStatusReconnectTimer) {
-        clearTimeout(waterCannonStatusReconnectTimer)
-        waterCannonStatusReconnectTimer = null
-    }
+    clearWaterCannonStatusReconnectTimer()
     if (waterCannonStatusSocket) {
         waterCannonStatusSocket.onclose = null
         waterCannonStatusSocket.close()
@@ -1524,10 +1553,10 @@ onBeforeUnmount(() => {
     width: 100%;
     min-width: 0;
     height: 100%;
-    border: 1px solid #aaa;
+    border: 1px solid #b8b8b8;
     border-radius: 5px;
-    color: #999;
-    background: #d7d7d7;
+    color: #fff;
+    background: #afafaf;
     transition: transform .08s ease, background-color .08s ease, box-shadow .08s ease;
 }
 
