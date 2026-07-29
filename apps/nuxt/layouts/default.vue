@@ -36,6 +36,192 @@
         <!-- <v-footer height="36" color="#F3F3F3" app>
             <div></div>
         </v-footer> -->
+        <v-dialog v-model="wsStatusDialog" fullscreen :scrim="false" transition="dialog-bottom-transition"
+            class="ws-status-dialog">
+            <v-card class="ws-status-screen" flat>
+                <header class="ws-status-header">
+                    <div>
+                        <div class="ws-status-eyebrow">SYSTEM DIAGNOSTICS</div>
+                        <h1 class="ws-status-title">全域 WebSocket 連線狀態</h1>
+                        <div class="ws-status-subtitle">
+                            每秒更新一次，只讀取連線狀態，不會中斷或重新建立連線
+                        </div>
+                    </div>
+                    <v-btn icon="mdi-close" variant="text" color="white" size="large" aria-label="關閉 WebSocket 診斷視窗"
+                        @click="wsStatusDialog = false"></v-btn>
+                </header>
+
+                <v-card-text class="ws-status-content">
+                    <section class="ws-status-summary">
+                        <div class="ws-summary-card">
+                            <div class="ws-summary-label">已連線</div>
+                            <div class="ws-summary-value ws-summary-value-online">
+                                {{ connectedWsCount }}
+                                <span>/ {{ wsStatusItems.length }}</span>
+                            </div>
+                        </div>
+                        <div class="ws-summary-card">
+                            <div class="ws-summary-label">主機</div>
+                            <div class="ws-summary-host">{{ wsStatusHost }}</div>
+                        </div>
+                        <div class="ws-summary-card">
+                            <div class="ws-summary-label">最後更新</div>
+                            <div class="ws-summary-host">{{ wsStatusLastUpdated || '尚未更新' }}</div>
+                        </div>
+                    </section>
+
+                    <section class="ws-status-grid" aria-label="WebSocket 連線列表">
+                        <article v-for="item in wsStatusItems" :key="item.port" class="ws-status-item" role="button"
+                            tabindex="0" :aria-label="`查看 Port ${item.port} 收發詳情`" @click="openWsDetails(item.port)"
+                            @keydown.enter.prevent="openWsDetails(item.port)"
+                            @keydown.space.prevent="openWsDetails(item.port)">
+                            <div class="ws-status-item-top">
+                                <div class="ws-port-group">
+                                    <span class="ws-status-dot" :style="{ backgroundColor: item.color }"></span>
+                                    <div>
+                                        <div class="ws-port-label">PORT</div>
+                                        <div class="ws-port-number">{{ item.port }}</div>
+                                    </div>
+                                </div>
+                                <v-chip :color="item.color" variant="flat" size="small" class="ws-status-chip">
+                                    {{ item.label }}
+                                </v-chip>
+                            </div>
+
+                            <dl class="ws-status-details">
+                                <div>
+                                    <dt>URL</dt>
+                                    <dd>{{ item.url }}</dd>
+                                </div>
+                                <div>
+                                    <dt>readyState</dt>
+                                    <dd>{{ item.readyStateLabel }}</dd>
+                                </div>
+                                <div>
+                                    <dt>監聽器</dt>
+                                    <dd>{{ item.messageListenerCount }} 個 message listener</dd>
+                                </div>
+                            </dl>
+                            <div class="ws-status-card-hint">
+                                <span>已記錄 {{ item.messages.length }} 筆收發內容</span>
+                                <span>點擊查看 <v-icon icon="mdi-chevron-right" size="18"></v-icon></span>
+                            </div>
+                        </article>
+                    </section>
+
+                    <footer class="ws-status-footer">
+                        <span>按</span>
+                        <kbd>`</kbd>
+                        <span>、</span>
+                        <kbd>Esc</kbd>
+                        <span>或右上角關閉按鈕離開診斷視窗</span>
+                    </footer>
+                </v-card-text>
+
+                <transition name="ws-detail">
+                    <div v-if="selectedWsItem" class="ws-detail-layer" @click.self="closeWsDetails">
+                        <aside class="ws-detail-panel" :aria-label="`Port ${selectedWsItem.port} WebSocket 詳情`">
+                            <header class="ws-detail-header">
+                                <div class="ws-detail-heading">
+                                    <v-btn icon="mdi-arrow-left" variant="text" color="white" size="small"
+                                        aria-label="返回 WebSocket 列表" @click="closeWsDetails"></v-btn>
+                                    <div>
+                                        <div class="ws-port-label">WEBSOCKET DETAILS</div>
+                                        <h2>Port {{ selectedWsItem.port }}</h2>
+                                    </div>
+                                </div>
+                                <v-chip :color="selectedWsItem.color" variant="flat" size="small"
+                                    class="ws-status-chip">
+                                    {{ selectedWsItem.label }}
+                                </v-chip>
+                            </header>
+
+                            <div class="ws-detail-body">
+                                <section class="ws-detail-summary">
+                                    <div>
+                                        <span>message 監聽器</span>
+                                        <strong>{{ selectedWsItem.messageListenerCount }}</strong>
+                                    </div>
+                                    <div>
+                                        <span>送出</span>
+                                        <strong class="ws-send-text">{{ selectedWsItem.sentCount }}</strong>
+                                    </div>
+                                    <div>
+                                        <span>接收</span>
+                                        <strong class="ws-receive-text">{{ selectedWsItem.receivedCount }}</strong>
+                                    </div>
+                                    <div>
+                                        <span>保留紀錄</span>
+                                        <strong>{{ selectedWsItem.messages.length }}</strong>
+                                    </div>
+                                </section>
+
+                                <div class="ws-listener-note">
+                                    <v-icon icon="mdi-information-outline" size="18"></v-icon>
+                                    <span>
+                                        監聽器數量是目前 socket 上透過 addEventListener 註冊的 message callback；
+                                        同一組件重複註冊會分別計數。
+                                    </span>
+                                </div>
+
+                                <section class="ws-message-section">
+                                    <div class="ws-message-toolbar">
+                                        <div>
+                                            <h3>即時收發內容</h3>
+                                            <span>僅記錄診斷視窗開啟期間的內容，最新資料排在最上方</span>
+                                        </div>
+                                        <div class="ws-message-actions">
+                                            <div class="ws-message-filters" aria-label="收發方向篩選">
+                                                <button v-for="filter in wsMessageFilters" :key="filter.value" type="button"
+                                                    :class="{ active: wsMessageFilter === filter.value }"
+                                                    @click="wsMessageFilter = filter.value">
+                                                    {{ filter.label }}
+                                                </button>
+                                            </div>
+                                            <v-btn variant="outlined" color="#94a3b8" size="small"
+                                                prepend-icon="mdi-delete-outline" @click="clearSelectedWsMessages">
+                                                清除
+                                            </v-btn>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="filteredWsMessages.length" class="ws-message-list">
+                                        <details v-for="(message, index) in filteredWsMessages" :key="message.id"
+                                            class="ws-message-entry" :open="index === 0">
+                                            <summary>
+                                                <span class="ws-direction-badge"
+                                                    :class="message.direction === 'send' ? 'is-send' : 'is-receive'">
+                                                    {{ message.direction === 'send' ? 'SEND' : 'RECEIVE' }}
+                                                </span>
+                                                <time>{{ message.timeLabel }}</time>
+                                                <span class="ws-message-route">
+                                                    {{ message.feature || '—' }}
+                                                    <template v-if="message.method"> / {{ message.method }}</template>
+                                                </span>
+                                                <span class="ws-message-size">
+                                                    {{ message.size }} {{ message.sizeUnit }}
+                                                </span>
+                                            </summary>
+                                            <div class="ws-message-meta">
+                                                <span>類型：{{ message.payloadType }}</span>
+                                                <span v-if="message.session">session：{{ message.session }}</span>
+                                                <span v-if="message.truncated">內容已截斷</span>
+                                            </div>
+                                            <pre>{{ message.payload }}</pre>
+                                        </details>
+                                    </div>
+                                    <div v-else class="ws-message-empty">
+                                        <v-icon icon="mdi-swap-horizontal" size="34"></v-icon>
+                                        <strong>目前沒有符合條件的收發紀錄</strong>
+                                        <span>保持此視窗開啟，新的 WebSocket 訊息會自動顯示在這裡。</span>
+                                    </div>
+                                </section>
+                            </div>
+                        </aside>
+                    </div>
+                </transition>
+            </v-card>
+        </v-dialog>
     </v-app>
 
     <!-- <v-app id="inspire">
@@ -63,6 +249,208 @@
 </template>
 <script setup>
 import L from 'leaflet'
+const {
+    $getIpaddress,
+    $webSocketconnect02,
+    $webSocketconnect03,
+    $webSocketconnect04,
+    $webSocketconnect05,
+    $webSocketconnect07,
+    $webSocketDiagnostics,
+    $setWebSocketDiagnosticsEnabled,
+    $clearWebSocketDiagnostics
+} = useNuxtApp()
+
+const wsStatusDialog = ref(false)
+const wsStatusLastUpdated = ref('')
+const wsStatusHost = ref('')
+const selectedWsPort = ref(null)
+const wsMessageFilter = ref('all')
+let wsStatusRefreshTimer = null
+const wsMessageFilters = [
+    { label: '全部', value: 'all' },
+    { label: '送出', value: 'send' },
+    { label: '接收', value: 'receive' }
+]
+
+const WS_STATUS_META = {
+    0: { label: '連線中', color: '#f59e0b', readyStateLabel: '0 — CONNECTING' },
+    1: { label: '已連線', color: '#22c55e', readyStateLabel: '1 — OPEN' },
+    2: { label: '關閉中', color: '#f97316', readyStateLabel: '2 — CLOSING' },
+    3: { label: '已斷線', color: '#ef4444', readyStateLabel: '3 — CLOSED' }
+}
+const WS_STATUS_UNAVAILABLE = {
+    label: '未建立',
+    color: '#64748b',
+    readyStateLabel: '—'
+}
+const WS_STATUS_UNKNOWN = {
+    label: '未知',
+    color: '#8b5cf6',
+    readyStateLabel: 'UNKNOWN'
+}
+
+const globalWsConnections = [
+    { port: '8702', getSocket: () => $webSocketconnect02?.() },
+    { port: '8703', getSocket: () => $webSocketconnect03?.() },
+    { port: '8704', getSocket: () => $webSocketconnect04?.() },
+    { port: '8705', getSocket: () => $webSocketconnect05?.() },
+    { port: '8707', getSocket: () => $webSocketconnect07?.() }
+]
+
+const wsStatusItems = shallowRef(globalWsConnections.map(({ port }) => ({
+    port,
+    url: `ws://-:${port}/`,
+    readyState: null,
+    messageListenerCount: 0,
+    sentCount: 0,
+    receivedCount: 0,
+    messages: [],
+    ...WS_STATUS_UNAVAILABLE
+})))
+
+const connectedWsCount = computed(() => {
+    return wsStatusItems.value.filter(item => item.readyState === 1).length
+})
+
+const selectedWsItem = computed(() => {
+    return wsStatusItems.value.find(item => item.port === selectedWsPort.value) || null
+})
+
+const filteredWsMessages = computed(() => {
+    const messages = selectedWsItem.value?.messages || []
+    if (wsMessageFilter.value === 'all') {
+        return messages
+    }
+    return messages.filter(message => message.direction === wsMessageFilter.value)
+})
+
+const refreshGlobalWsStatuses = () => {
+    const host = $getIpaddress?.() || window.location.hostname || '-'
+    wsStatusHost.value = host
+    wsStatusItems.value = globalWsConnections.map(({ port, getSocket }) => {
+        let socket = null
+        try {
+            socket = getSocket()
+        } catch (error) {
+            console.warn(`[WS diagnostics] 無法取得 ${port} WebSocket`, error)
+        }
+
+        const readyState = typeof socket?.readyState === 'number' ? socket.readyState : null
+        const meta = readyState === null
+            ? WS_STATUS_UNAVAILABLE
+            : (WS_STATUS_META[readyState] || {
+                ...WS_STATUS_UNKNOWN,
+                readyStateLabel: String(readyState)
+            })
+
+        let diagnostics = {
+            messageListenerCount: 0,
+            sentCount: 0,
+            receivedCount: 0,
+            messages: []
+        }
+        try {
+            diagnostics = $webSocketDiagnostics?.(port) || diagnostics
+        } catch (error) {
+            console.warn(`[WS diagnostics] 無法取得 ${port} 收發診斷資料`, error)
+        }
+
+        return {
+            port,
+            url: socket?.url || `ws://${host}:${port}/`,
+            readyState,
+            ...diagnostics,
+            ...meta
+        }
+    })
+    wsStatusLastUpdated.value = new Intl.DateTimeFormat('zh-TW', {
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).format(new Date())
+}
+
+const stopWsStatusRefresh = () => {
+    if (wsStatusRefreshTimer !== null) {
+        clearInterval(wsStatusRefreshTimer)
+        wsStatusRefreshTimer = null
+    }
+}
+
+const startWsStatusRefresh = () => {
+    stopWsStatusRefresh()
+    $setWebSocketDiagnosticsEnabled?.(true)
+    refreshGlobalWsStatuses()
+    wsStatusRefreshTimer = setInterval(refreshGlobalWsStatuses, 1000)
+}
+
+const openWsDetails = (port) => {
+    wsMessageFilter.value = 'all'
+    selectedWsPort.value = port
+    refreshGlobalWsStatuses()
+}
+
+const closeWsDetails = () => {
+    selectedWsPort.value = null
+}
+
+const clearSelectedWsMessages = () => {
+    if (selectedWsPort.value === null) {
+        return
+    }
+    $clearWebSocketDiagnostics?.(selectedWsPort.value)
+    refreshGlobalWsStatuses()
+}
+
+const isEditableTarget = (target) => {
+    if (!(target instanceof HTMLElement)) {
+        return false
+    }
+    return target.matches('input, textarea, select, [contenteditable="true"]')
+        || target.closest('input, textarea, select, [contenteditable="true"]') !== null
+}
+
+const handleWsStatusKeydown = (event) => {
+    if (event.repeat || event.isComposing) {
+        return
+    }
+
+    if (event.key === 'Escape' && selectedWsPort.value !== null) {
+        event.preventDefault()
+        closeWsDetails()
+        return
+    }
+
+    if (event.key === 'Escape' && wsStatusDialog.value) {
+        event.preventDefault()
+        wsStatusDialog.value = false
+        return
+    }
+
+    const isBackquote = event.code === 'Backquote' || event.key === '`'
+    if (!isBackquote || isEditableTarget(event.target)) {
+        return
+    }
+
+    event.preventDefault()
+    wsStatusDialog.value = !wsStatusDialog.value
+}
+
+watch(wsStatusDialog, (isOpen) => {
+    if (isOpen) {
+        startWsStatusRefresh()
+    } else {
+        stopWsStatusRefresh()
+        $setWebSocketDiagnosticsEnabled?.(false)
+        closeWsDetails()
+    }
+})
+
 useState('editTimehandleBarSwitch', () => null)
 useHead({
     // script: [{
@@ -301,15 +689,10 @@ const lows = () => {
         ctx.stroke();
     }
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === '`') {
-            stats.style.display = stats.style.display === 'none' ? 'block' : 'none';
-        }
-    });
-
     update();
 }
 onMounted(() => {
+    window.addEventListener('keydown', handleWsStatusKeydown)
     if (false) {
         // ===== 設定 =====
         const PRIMARY = "http://localhost:3000";
@@ -410,8 +793,603 @@ onMounted(() => {
         }
     }
 })
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleWsStatusKeydown)
+    stopWsStatusRefresh()
+    $setWebSocketDiagnosticsEnabled?.(false)
+})
 </script>
 <style scoped>
+.ws-status-dialog {
+    z-index: 9999;
+}
+
+.ws-status-screen {
+    min-height: 100vh;
+    color: #e2e8f0;
+    background:
+        radial-gradient(circle at 10% 0%, rgb(37 99 235 / 22%), transparent 34%),
+        radial-gradient(circle at 95% 100%, rgb(14 165 233 / 14%), transparent 38%),
+        #0b1220;
+}
+
+.ws-status-header {
+    min-height: 112px;
+    padding: 24px clamp(24px, 4vw, 64px);
+    border-bottom: 1px solid rgb(148 163 184 / 18%);
+    background: rgb(15 23 42 / 78%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+}
+
+.ws-status-eyebrow {
+    margin-bottom: 4px;
+    color: #38bdf8;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .18em;
+}
+
+.ws-status-title {
+    margin: 0;
+    color: #f8fafc;
+    font-size: clamp(24px, 2.3vw, 36px);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.ws-status-subtitle {
+    margin-top: 7px;
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.ws-status-content {
+    width: min(1440px, 100%);
+    margin: 0 auto;
+    padding: clamp(24px, 4vw, 56px) !important;
+}
+
+.ws-status-summary {
+    margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: minmax(180px, .65fr) repeat(2, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.ws-summary-card {
+    min-height: 112px;
+    padding: 20px 24px;
+    border: 1px solid rgb(148 163 184 / 16%);
+    border-radius: 14px;
+    background: rgb(30 41 59 / 72%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.ws-summary-label {
+    margin-bottom: 8px;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.ws-summary-value {
+    color: #f8fafc;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ws-summary-value span {
+    color: #64748b;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.ws-summary-value-online {
+    color: #4ade80;
+}
+
+.ws-summary-host {
+    overflow-wrap: anywhere;
+    color: #e2e8f0;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 17px;
+}
+
+.ws-status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.ws-status-item {
+    min-width: 0;
+    padding: 22px 24px;
+    border: 1px solid rgb(148 163 184 / 16%);
+    border-radius: 14px;
+    background: rgb(15 23 42 / 82%);
+    box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .2s;
+}
+
+.ws-status-item:hover,
+.ws-status-item:focus-visible {
+    border-color: rgb(56 189 248 / 48%);
+    background: rgb(22 34 55 / 94%);
+    outline: none;
+    transform: translateY(-2px);
+}
+
+.ws-status-item-top,
+.ws-port-group {
+    display: flex;
+    align-items: center;
+}
+
+.ws-status-item-top {
+    margin-bottom: 20px;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.ws-port-group {
+    gap: 14px;
+}
+
+.ws-status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    box-shadow: 0 0 16px currentColor;
+}
+
+.ws-port-label {
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .14em;
+}
+
+.ws-port-number {
+    color: #f8fafc;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.05;
+}
+
+.ws-status-chip {
+    min-width: 78px;
+    font-weight: 700;
+    justify-content: center;
+}
+
+.ws-status-details {
+    margin: 0;
+    display: grid;
+    gap: 12px;
+}
+
+.ws-status-details>div {
+    min-width: 0;
+    padding-top: 12px;
+    border-top: 1px solid rgb(148 163 184 / 12%);
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 12px;
+}
+
+.ws-status-details dt {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.ws-status-details dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: #cbd5e1;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13px;
+}
+
+.ws-status-card-hint {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgb(148 163 184 / 12%);
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.ws-status-card-hint>span:last-child {
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+}
+
+.ws-detail-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: rgb(2 6 23 / 62%);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ws-detail-panel {
+    width: min(980px, 92vw);
+    height: 100vh;
+    border-left: 1px solid rgb(148 163 184 / 20%);
+    color: #e2e8f0;
+    background: #0b1220;
+    box-shadow: -24px 0 70px rgb(0 0 0 / 35%);
+    display: flex;
+    flex-direction: column;
+}
+
+.ws-detail-header {
+    min-height: 92px;
+    padding: 18px 24px;
+    border-bottom: 1px solid rgb(148 163 184 / 16%);
+    background: #111c2f;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.ws-detail-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ws-detail-heading h2 {
+    margin: 2px 0 0;
+    color: #f8fafc;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 26px;
+    line-height: 1.1;
+}
+
+.ws-detail-body {
+    min-height: 0;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.ws-detail-summary {
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.ws-detail-summary>div {
+    min-width: 0;
+    padding: 16px 18px;
+    border: 1px solid rgb(148 163 184 / 14%);
+    border-radius: 10px;
+    background: #111c2f;
+}
+
+.ws-detail-summary span {
+    color: #64748b;
+    display: block;
+    font-size: 12px;
+}
+
+.ws-detail-summary strong {
+    margin-top: 4px;
+    color: #f8fafc;
+    display: block;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 24px;
+}
+
+.ws-detail-summary .ws-send-text {
+    color: #38bdf8;
+}
+
+.ws-detail-summary .ws-receive-text {
+    color: #4ade80;
+}
+
+.ws-listener-note {
+    margin-bottom: 22px;
+    padding: 10px 12px;
+    border: 1px solid rgb(56 189 248 / 16%);
+    border-radius: 8px;
+    color: #7dd3fc;
+    background: rgb(14 165 233 / 8%);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.ws-message-section {
+    min-height: 300px;
+}
+
+.ws-message-toolbar {
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+}
+
+.ws-message-toolbar h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 18px;
+}
+
+.ws-message-toolbar>div>span {
+    margin-top: 3px;
+    color: #64748b;
+    display: block;
+    font-size: 12px;
+}
+
+.ws-message-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ws-message-filters {
+    padding: 3px;
+    border: 1px solid rgb(148 163 184 / 14%);
+    border-radius: 7px;
+    background: #111827;
+    display: flex;
+}
+
+.ws-message-filters button {
+    min-width: 54px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 5px;
+    color: #64748b;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.ws-message-filters button.active {
+    color: #e0f2fe;
+    background: #075985;
+}
+
+.ws-message-list {
+    display: grid;
+    gap: 9px;
+}
+
+.ws-message-entry {
+    border: 1px solid rgb(148 163 184 / 14%);
+    border-radius: 9px;
+    background: #0f192a;
+    overflow: hidden;
+}
+
+.ws-message-entry[open] {
+    border-color: rgb(56 189 248 / 26%);
+}
+
+.ws-message-entry summary {
+    min-height: 48px;
+    padding: 10px 14px;
+    color: #94a3b8;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 78px 78px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    list-style: none;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+}
+
+.ws-message-entry summary::-webkit-details-marker {
+    display: none;
+}
+
+.ws-direction-badge {
+    width: 72px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+}
+
+.ws-direction-badge.is-send {
+    color: #7dd3fc;
+    background: rgb(14 165 233 / 16%);
+}
+
+.ws-direction-badge.is-receive {
+    color: #86efac;
+    background: rgb(34 197 94 / 16%);
+}
+
+.ws-message-route {
+    min-width: 0;
+    overflow: hidden;
+    color: #cbd5e1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ws-message-size {
+    color: #64748b;
+    text-align: right;
+}
+
+.ws-message-meta {
+    padding: 8px 14px;
+    border-top: 1px solid rgb(148 163 184 / 10%);
+    color: #64748b;
+    background: rgb(2 6 23 / 30%);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 11px;
+}
+
+.ws-message-entry pre {
+    max-height: 360px;
+    margin: 0;
+    padding: 14px;
+    overflow: auto;
+    color: #dbeafe;
+    background: #060c17;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ws-message-empty {
+    min-height: 240px;
+    border: 1px dashed rgb(148 163 184 / 18%);
+    border-radius: 10px;
+    color: #475569;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.ws-message-empty strong {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.ws-message-empty span {
+    font-size: 12px;
+}
+
+.ws-detail-enter-active,
+.ws-detail-leave-active {
+    transition: opacity .2s;
+}
+
+.ws-detail-enter-active .ws-detail-panel,
+.ws-detail-leave-active .ws-detail-panel {
+    transition: transform .2s ease;
+}
+
+.ws-detail-enter-from,
+.ws-detail-leave-to {
+    opacity: 0;
+}
+
+.ws-detail-enter-from .ws-detail-panel,
+.ws-detail-leave-to .ws-detail-panel {
+    transform: translateX(40px);
+}
+
+.ws-status-footer {
+    margin-top: 30px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    font-size: 13px;
+}
+
+.ws-status-footer kbd {
+    min-width: 30px;
+    padding: 3px 8px;
+    border: 1px solid #475569;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    color: #cbd5e1;
+    background: #1e293b;
+    font-family: Consolas, Monaco, monospace;
+    text-align: center;
+}
+
+@media (max-width: 760px) {
+    .ws-status-header {
+        min-height: 96px;
+        padding: 18px 20px;
+    }
+
+    .ws-status-subtitle {
+        display: none;
+    }
+
+    .ws-status-content {
+        padding: 20px !important;
+    }
+
+    .ws-status-summary,
+    .ws-status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ws-summary-card {
+        min-height: 92px;
+    }
+
+    .ws-status-details>div {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    .ws-detail-panel {
+        width: 100vw;
+    }
+
+    .ws-detail-body {
+        padding: 16px;
+    }
+
+    .ws-detail-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ws-message-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ws-message-actions {
+        justify-content: space-between;
+    }
+
+    .ws-message-entry summary {
+        grid-template-columns: 72px 70px minmax(0, 1fr);
+    }
+
+    .ws-message-size {
+        display: none;
+    }
+}
+
 .ffffont {
     color: #fff !important;
 }

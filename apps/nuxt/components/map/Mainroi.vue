@@ -1105,6 +1105,10 @@ const initWs3 = () => {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
                 state.wsListener3.close = null
             }
+            if (state.wsListener3.message !== null) {
+                state.ws3.removeEventListener("message", state.wsListener3.message)
+                state.wsListener3.message = null
+            }
             const colseEvent = () => {
                 setTimeout(() => {
                     openwebsocket03()
@@ -1149,11 +1153,11 @@ const initWs3 = () => {
                 }
             }
             state.ws3.addEventListener("message", messageEvent03)
+            state.wsListener3.message = messageEvent03
             const initConnent = () => {
                 queryCameraInfo()
             }
             initConnent()
-            // state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
             setTimeout(() => {
                 openwebsocket03()

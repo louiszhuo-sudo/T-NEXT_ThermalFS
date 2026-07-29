@@ -4738,6 +4738,10 @@ const initWs3 = () => {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
                 state.wsListener3.close = null
             }
+            if (state.wsListener3.message !== null) {
+                state.ws3.removeEventListener("message", state.wsListener3.message)
+                state.wsListener3.message = null
+            }
             const colseEvent = () => {
                 setTimeout(() => {
                     openwebsocket03()
@@ -4777,7 +4781,7 @@ const initWs3 = () => {
                 }
             }
             state.ws3.addEventListener("message", messageEvent)
-            // state.wsListener3.message = messageEvent
+            state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
             setTimeout(() => {
                 openwebsocket03()
@@ -4794,6 +4798,10 @@ const initWs7 = () => {
             if (state.wsListener7.close !== null) {
                 state.ws7.removeEventListener("close", state.wsListener7.close)
                 state.wsListener7.close = null
+            }
+            if (state.wsListener7.message !== null) {
+                state.ws7.removeEventListener("message", state.wsListener7.message)
+                state.wsListener7.message = null
             }
             const colseEvent = () => {
                 setTimeout(() => {
@@ -4841,7 +4849,7 @@ const initWs7 = () => {
                 }
             }
             state.ws7.addEventListener("message", messageEvent)
-            // state.wsListener3.message = messageEvent
+            state.wsListener7.message = messageEvent
         } else if ($webSocketconnect07().readyState !== 1) {
             setTimeout(() => {
                 openwebsocket07()

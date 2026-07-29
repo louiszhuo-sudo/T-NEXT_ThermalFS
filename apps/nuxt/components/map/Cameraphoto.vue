@@ -1489,6 +1489,10 @@ const initWs3 = () => {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
                 state.wsListener3.close = null
             }
+            if (state.wsListener3.message !== null) {
+                state.ws3.removeEventListener("message", state.wsListener3.message)
+                state.wsListener3.message = null
+            }
             const colseEvent = () => {
                 setTimeout(() => {
                     openwebsocket03()
@@ -1548,7 +1552,7 @@ const initWs3 = () => {
                 method = null
             }
             state.ws3.addEventListener("message", messageEvent)
-            // state.wsListener3.message = messageEvent
+            state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
             setTimeout(() => {
                 openwebsocket03()
@@ -1716,17 +1720,19 @@ const stopProgram = () => {
         state.webWorker.terminate();
         state.webWorker = null
     }
-    if (state.ws3 !== null) {
-        if (state.ws3.readyState === 1) {
-            state.ws3.close()
-        }
-        // console.log(state.ws3);
+    if (temprefusimginttimeout.value !== null) {
+        clearTimeout(temprefusimginttimeout.value)
+        temprefusimginttimeout.value = null
     }
-    if (state.wsListener3.close !== null) {
+    if (temprefusimgint !== null) {
+        clearInterval(temprefusimgint)
+        temprefusimgint = null
+    }
+    if (state.ws3 !== null && state.wsListener3.close !== null) {
         state.ws3.removeEventListener("close", state.wsListener3.close)
         state.wsListener3.close = null
     }
-    if (state.wsListener3.message !== null) {
+    if (state.ws3 !== null && state.wsListener3.message !== null) {
         state.ws3.removeEventListener("message", state.wsListener3.message)
         state.wsListener3.message = null
     }
