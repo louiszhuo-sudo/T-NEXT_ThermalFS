@@ -29,6 +29,13 @@ const { $webSocket05URL } = useNuxtApp()
 const LMmap = ref(null)
 const mapcanvas = ref(null)
 var map = null
+const handleDocumentMouseDown = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.disable()
+}
+
+const handleDocumentMouseUp = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.enable()
+}
 const runIndex = reactive({
     index: 0
 })
@@ -1451,9 +1458,45 @@ const runRTC = (id, url, videoType) => {
 }
 let temprefusimgint = null
 let temprefusimginttimeout = ref(null)
+let isWorkActive = false
+let ws3RetryTimer = null
+let workerRestartTimer = null
+
+const clearWs3RetryTimer = () => {
+    if (ws3RetryTimer !== null) {
+        clearTimeout(ws3RetryTimer)
+        ws3RetryTimer = null
+    }
+}
+
+const scheduleWs3Retry = (callback) => {
+    if (!isWorkActive || ws3RetryTimer !== null) return
+    ws3RetryTimer = setTimeout(() => {
+        ws3RetryTimer = null
+        if (isWorkActive) callback()
+    }, 1000)
+}
+
+const clearWorkerRestartTimer = () => {
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+}
+
+const scheduleWorkerRestart = () => {
+    if (!isWorkActive || workerRestartTimer !== null) return
+    workerRestartTimer = setTimeout(() => {
+        workerRestartTimer = null
+        if (isWorkActive) runwk()
+    }, 1)
+}
+
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect03().readyState === 1) {
+            clearWs3RetryTimer()
             state.ws3 = $webSocketconnect03()
             if (temprefusimginttimeout.value !== null) {
                 clearTimeout(temprefusimginttimeout.value)
@@ -1494,9 +1537,7 @@ const initWs3 = () => {
                 state.wsListener3.message = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                scheduleWs3Retry(openwebsocket03)
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
@@ -1554,9 +1595,7 @@ const initWs3 = () => {
             state.ws3.addEventListener("message", messageEvent)
             state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            scheduleWs3Retry(openwebsocket03)
         }
     }
     openwebsocket03()
@@ -1596,8 +1635,11 @@ const initWs3 = () => {
 // }
 // =================================================================
 const switchWK = (e) => {
+    const enabled = Boolean(e)
+    if (isWorkActive === enabled) return
+    isWorkActive = enabled
     // console.log('map switchWK', e);
-    if (e) {
+    if (enabled) {
         state.tempPtz.forEach((item) => {
             if (item.data !== null) {
                 removePtzs({ id: item.data.id })
@@ -1626,6 +1668,12 @@ const switchWK = (e) => {
     }
 }
 const runwk = () => {
+    if (!isWorkActive) return
+    clearWorkerRestartTimer()
+    if (state.webWorker !== null) {
+        state.webWorker.terminate()
+        state.webWorker = null
+    }
     // console.log('啟動wk 5', state.imgWidth, state.imgHeight, state.imageOverlayTemp !== null ? state.imageOverlayTemp.getBounds() : '');
     state.webWorker = new Worker('/worker/cameraphoto.js');
     state.webWorker.addEventListener('message', (e) => {
@@ -1691,9 +1739,7 @@ const runwk = () => {
             // state.wkTemp.ptzinto = parameter.ptzinto
             state.webWorker.terminate();
             state.webWorker = null
-            setTimeout(() => {
-                runwk()
-            }, 1)
+            scheduleWorkerRestart()
         }
         res = null
         type = null
@@ -1701,6 +1747,13 @@ const runwk = () => {
     })
 }
 const stopProgram = () => {
+    isWorkActive = false
+    clearWs3RetryTimer()
+    clearWorkerRestartTimer()
+    if (state.time111 !== null) {
+        clearTimeout(state.time111)
+        state.time111 = null
+    }
     state.tempPtz.forEach((item) => {
         if (item.data !== null) {
             removePtzs({ id: item.data.id })
@@ -1766,20 +1819,12 @@ onMounted(() => {
     //     console.log('displayRoi', $displayRoi());
     // },1000)
 
-    document.addEventListener('mousedown', (event) => {
-        // event.preventDefault()
-        if (event.button === 0 && map !== null) {
-            map.dragging.disable()
-        }
-
-    });
-    document.addEventListener('mouseup', () => {
-        if (event.button === 0 && map !== null) {
-            map.dragging.enable()
-        }
-    });
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
 })
 onBeforeUnmount(() => {
+    document.removeEventListener('mousedown', handleDocumentMouseDown)
+    document.removeEventListener('mouseup', handleDocumentMouseUp)
     console.log('onBeforeUnmount');
     state.rtcPeerConnectionItems.forEach((item) => {
         item.close();

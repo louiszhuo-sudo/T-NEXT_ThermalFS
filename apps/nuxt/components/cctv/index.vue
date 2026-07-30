@@ -395,6 +395,14 @@ const refmoduleEchartsbar = ref([])
 const realTimeCanvasTemp = ref(null);
 const realTimeCanvas = ref(null);
 const refreshHmiWk = ref([])
+const hmiRestartTimers = new Map()
+
+const stopAllHmiWorkers = () => {
+    hmiRestartTimers.forEach((timer) => clearTimeout(timer))
+    hmiRestartTimers.clear()
+    refreshHmiWk.value.forEach((workerItem) => workerItem.e?.terminate())
+    refreshHmiWk.value = []
+}
 const state = reactive({
     refsItem: true,
     viewMode: 0,
@@ -836,14 +844,15 @@ const toMapPage1 = (e) => {
         })
         state.timeout2 = setTimeout(() => {
             mapmain.value.forEach((item, index) => {
-                item.el.switchWK(true)
+                item.el.switchWK(item.id === id)
             })
             ptzMap01.value.forEach((item, index) => {
-                item.el.switchWK(true)
+                item.el.switchWK(item.id === id)
             })
             mapPanoramic.value.forEach((item, index) => {
-                item.el.switchWK(true)
+                item.el.switchWK(item.id === id)
             })
+            state.timeout2 = null
         }, 10)
         state.timeout1 = null
         refmoduleEcharttop.value.forEach((e) => {
@@ -986,41 +995,79 @@ const upContainer = (e, item, index, sw) => {
         state.tempHoverDiv = null
     }
 }
+let isComponentActive = true
+let ws3RetryTimer = null
+let ws5RetryTimer = null
+
+const clearWebSocketRetryTimers = () => {
+    if (ws3RetryTimer !== null) {
+        clearTimeout(ws3RetryTimer)
+        ws3RetryTimer = null
+    }
+    if (ws5RetryTimer !== null) {
+        clearTimeout(ws5RetryTimer)
+        ws5RetryTimer = null
+    }
+}
+
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isComponentActive) return
         if ($webSocketconnect03().readyState === 1) {
+            if (ws3RetryTimer !== null) {
+                clearTimeout(ws3RetryTimer)
+                ws3RetryTimer = null
+            }
             state.ws3 = $webSocketconnect03()
             if (state.wsListener3.close !== null) {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
                 state.wsListener3.close = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                if (isComponentActive && ws3RetryTimer === null) {
+                    ws3RetryTimer = setTimeout(() => {
+                        ws3RetryTimer = null
+                        if (isComponentActive) openwebsocket03()
+                    }, 1000)
+                }
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            if (isComponentActive && ws3RetryTimer === null) {
+                ws3RetryTimer = setTimeout(() => {
+                    ws3RetryTimer = null
+                    if (isComponentActive) openwebsocket03()
+                }, 1000)
+            }
         }
     }
     openwebsocket03()
 }
 const initWs5 = () => {
     const openwebsocket05 = () => {
+        if (!isComponentActive) return
         if ($webSocketconnect05().readyState === 1) {
+            if (ws5RetryTimer !== null) {
+                clearTimeout(ws5RetryTimer)
+                ws5RetryTimer = null
+            }
             state.ws5 = $webSocketconnect05()
             if (state.wsListener5.close !== null) {
                 state.ws5.removeEventListener("close", state.wsListener5.close)
                 state.wsListener5.close = null
             }
+            if (state.wsListener5.message !== null) {
+                state.ws5.removeEventListener("message", state.wsListener5.message)
+                state.wsListener5.message = null
+            }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket05()
-                }, 1000)
+                if (isComponentActive && ws5RetryTimer === null) {
+                    ws5RetryTimer = setTimeout(() => {
+                        ws5RetryTimer = null
+                        if (isComponentActive) openwebsocket05()
+                    }, 1000)
+                }
             }
             state.ws5.addEventListener("close", colseEvent)
             state.wsListener5.close = colseEvent
@@ -1032,11 +1079,14 @@ const initWs5 = () => {
                 // console.log(data);
             }
             state.ws5.addEventListener("message", messageEvent)
-            // state.wsListener3.message = messageEvent
+            state.wsListener5.message = messageEvent
         } else if ($webSocketconnect05().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket05()
-            }, 1000)
+            if (isComponentActive && ws5RetryTimer === null) {
+                ws5RetryTimer = setTimeout(() => {
+                    ws5RetryTimer = null
+                    if (isComponentActive) openwebsocket05()
+                }, 1000)
+            }
         }
     }
     openwebsocket05()
@@ -1048,6 +1098,8 @@ let children = [
     // { x: 3, y: 0, w: 3, h: 2, content: '123123', id: 0 }
 ];
 const runHMIwk = (item) => {
+    if (!isComponentActive) return
+    if (refreshHmiWk.value.some((workerItem) => workerItem.item.tab_id === item.tab_id)) return
     // console.log('runHMIwk', item.tab_id);
     let temp = new Worker('/worker/wktows02-hmi.js')
     temp.addEventListener('message', (e) => {
@@ -1082,10 +1134,13 @@ const runHMIwk = (item) => {
             temp.terminate();
             temp = null
             refreshHmiWk.value = refreshHmiWk.value.filter((e) => e.item.tab_id !== item.tab_id)
-            setTimeout(() => {
-                runHMIwk(item)
-                console.log('close', refreshHmiWk.value);
-            }, 1)
+            if (isComponentActive && !hmiRestartTimers.has(item.tab_id)) {
+                const restartTimer = setTimeout(() => {
+                    hmiRestartTimers.delete(item.tab_id)
+                    if (isComponentActive) runHMIwk(item)
+                }, 1)
+                hmiRestartTimers.set(item.tab_id, restartTimer)
+            }
         }
     })
     refreshHmiWk.value.push({
@@ -1288,7 +1343,13 @@ onMounted(() => {
         if (focusCam !== null) {
             pendingInitialCameraId.value = focusCam
         }
-        setTimeout(() => {
+        if (state.timeout1 !== null) {
+            clearTimeout(state.timeout1)
+        }
+        if (state.timeout2 !== null) {
+            clearTimeout(state.timeout2)
+        }
+        state.timeout1 = setTimeout(() => {
             const container_list = data.layout[findID].container_list
             let tempId = []
             container_list.forEach((item) => {
@@ -1306,7 +1367,7 @@ onMounted(() => {
                 item.el.switchWK(false)
             })
 
-            setTimeout(() => {
+            state.timeout2 = setTimeout(() => {
                 mapmain.value.forEach((item, index) => {
                     const findid = tempId.findIndex((e) => e === item.id)
                     // console.log('findid !== -1 ? true : false', findid !== -1 ? true : false);
@@ -1326,7 +1387,9 @@ onMounted(() => {
                 mapImport3.value.forEach((item, index) => {
                     item.el.invaliMapSzie()
                 })
+                state.timeout2 = null
             }, 1)
+            state.timeout1 = null
         }, 10)
     }
 
@@ -1337,6 +1400,25 @@ onMounted(() => {
     // }, 1000)
 })
 onBeforeUnmount(() => {
+    isComponentActive = false
+    clearWebSocketRetryTimers()
+    stopAllHmiWorkers()
+    if (state.timeout1 !== null) {
+        clearTimeout(state.timeout1)
+        state.timeout1 = null
+    }
+    if (state.timeout2 !== null) {
+        clearTimeout(state.timeout2)
+        state.timeout2 = null
+    }
+    if (state.timeout3 !== null) {
+        clearTimeout(state.timeout3)
+        state.timeout3 = null
+    }
+    if (state.timeout4 !== null) {
+        clearTimeout(state.timeout4)
+        state.timeout4 = null
+    }
     if (state.wsListener2.close !== null) {
         state.ws2.removeEventListener("close", state.wsListener2.close)
         state.wsListener2.close = null

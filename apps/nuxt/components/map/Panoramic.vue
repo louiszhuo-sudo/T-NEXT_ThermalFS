@@ -131,6 +131,13 @@ const roidiv = ref(null)
 const mapcanvas = ref(null)
 const base64 = useAttrs().base64
 var map = null
+const handleDocumentMouseDown = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.disable()
+}
+
+const handleDocumentMouseUp = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.enable()
+}
 const state = reactive({
     rtcPeerConnectionItems: [],
     keyctrl: false,
@@ -1012,9 +1019,29 @@ const backmap = (e) => {
     }, 1000)
 }
 let temprefusimgint = null
+let isWorkActive = false
+let ws3RetryTimer = null
+let workerRestartTimer = null
+
+const clearWorkTimers = () => {
+    if (ws3RetryTimer !== null) {
+        clearTimeout(ws3RetryTimer)
+        ws3RetryTimer = null
+    }
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+}
+
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect03().readyState === 1) {
+            if (ws3RetryTimer !== null) {
+                clearTimeout(ws3RetryTimer)
+                ws3RetryTimer = null
+            }
             state.ws3 = $webSocketconnect03()
             setTimeout(() => {
                 state.mapUrlBase64 = 'data:image/png;base64,' + base64
@@ -1072,9 +1099,12 @@ const initWs3 = () => {
                 state.wsListener3.message = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                if (isWorkActive && ws3RetryTimer === null) {
+                    ws3RetryTimer = setTimeout(() => {
+                        ws3RetryTimer = null
+                        if (isWorkActive) openwebsocket03()
+                    }, 1000)
+                }
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
@@ -1127,15 +1157,22 @@ const initWs3 = () => {
             state.ws3.addEventListener("message", messageEvent)
             state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            if (isWorkActive && ws3RetryTimer === null) {
+                ws3RetryTimer = setTimeout(() => {
+                    ws3RetryTimer = null
+                    if (isWorkActive) openwebsocket03()
+                }, 1000)
+            }
         }
     }
     openwebsocket03()
 }
 const switchWK = (e) => {
-    if (e) {
+    const enabled = Boolean(e)
+    if (isWorkActive === enabled) return
+    isWorkActive = enabled
+    if (enabled) {
+        initWs3()
         runwk()
     } else {
         stopProgram()
@@ -1143,6 +1180,17 @@ const switchWK = (e) => {
     }
 }
 const stopProgram = () => {
+    isWorkActive = false
+    clearWorkTimers()
+    if (state.ws3 !== null && state.wsListener3.close !== null) {
+        state.ws3.removeEventListener("close", state.wsListener3.close)
+        state.wsListener3.close = null
+    }
+    if (state.ws3 !== null && state.wsListener3.message !== null) {
+        state.ws3.removeEventListener("message", state.wsListener3.message)
+        state.wsListener3.message = null
+    }
+    state.ws3 = null
     if (state.webWorker !== null) {
         state.webWorker.terminate();
         state.webWorker = null
@@ -1175,6 +1223,15 @@ const cutoverCanvasMap = () => {
     }
 }
 const runwk = () => {
+    if (!isWorkActive) return
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+    if (state.webWorker !== null) {
+        state.webWorker.terminate()
+        state.webWorker = null
+    }
     state.webWorker = new Worker('/worker/roiTrack-onlyroi-panoramic.js');
     state.webWorker.addEventListener('message', (e) => {
         let res = e.data
@@ -1208,9 +1265,12 @@ const runwk = () => {
             console.log('close');
             state.webWorker.terminate();
             state.webWorker = null
-            setTimeout(() => {
-                runwk()
-            }, 1)
+            if (isWorkActive && workerRestartTimer === null) {
+                workerRestartTimer = setTimeout(() => {
+                    workerRestartTimer = null
+                    if (isWorkActive) runwk()
+                }, 1)
+            }
         }
         res = null
         type = null
@@ -1218,7 +1278,6 @@ const runwk = () => {
     })
 }
 onMounted(() => {
-    initWs3()
     // let temp = null
 
     // const randere = () => {
@@ -1230,35 +1289,13 @@ onMounted(() => {
     //     }, 1000)
     // }
     // randere()
-    document.addEventListener('mousedown', (event) => {
-        // event.preventDefault()
-        if (event.button === 0 && map !== null) {
-            map.dragging.disable()
-        }
-
-    });
-    document.addEventListener('mouseup', () => {
-        if (event.button === 0 && map !== null) {
-            map.dragging.enable()
-        }
-    });
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
 })
 onBeforeUnmount(() => {
-    if (state.wsListener3.close !== null) {
-        state.ws3.removeEventListener("close", state.wsListener3.close)
-        state.wsListener3.close = null
-    }
-    if (state.wsListener3.message !== null) {
-        state.ws3.removeEventListener("message", state.wsListener3.message)
-        state.wsListener3.message = null
-    }
-    if (state.ws3 !== null) {
-        state.ws3 = null
-    }
-    if (state.webWorker !== null) {
-        state.webWorker.terminate();
-        state.webWorker = null
-    }
+    document.removeEventListener('mousedown', handleDocumentMouseDown)
+    document.removeEventListener('mouseup', handleDocumentMouseUp)
+    stopProgram()
     if (state.temptimeee !== null) {
         clearTimeout(state.temptimeee)
         state.temptimeee = null

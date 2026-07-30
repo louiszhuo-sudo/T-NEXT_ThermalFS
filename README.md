@@ -45,7 +45,7 @@ npm run build:desktop
 npm run pack:win
 ```
 
-`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.16.exe`. The NSIS installer includes a Windows sign-in startup option; the portable build can configure the same behavior from the in-app settings window.
+`pack:win` produces `pack/ThermalFS.exe` and `pack/ThermalFS Setup 1.0.18.exe`. The NSIS installer includes a Windows sign-in startup option; the portable build can configure the same behavior from the in-app settings window.
 
 ### Automated per-user installation
 

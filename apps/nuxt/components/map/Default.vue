@@ -141,6 +141,23 @@ const roiMorphControl = ref('')
 //     console.log('ptzinto', ptzinto);
 // }, 100)
 var map = null
+let mapAnimationFrameId = null
+
+const handleDocumentKeyDown = (event) => {
+    if (event.ctrlKey) state.keyctrl = true
+}
+
+const handleDocumentKeyUp = (event) => {
+    if (event.key === 'Control') state.keyctrl = false
+}
+
+const handleDocumentMouseDown = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.disable()
+}
+
+const handleDocumentMouseUp = (event) => {
+    if (event.button === 0 && map !== null) map.dragging.enable()
+}
 const runIndex = reactive({
     index: 0
 })
@@ -1207,25 +1224,17 @@ const leafletJsInit = () => {
         //     // console.log(polyline.getBounds());
         // }
         // 多選框跟蹤 end
-        requestAnimationFrame(animate);
+        mapAnimationFrameId = requestAnimationFrame(animate);
     }
     // randerRadius()
+    if (mapAnimationFrameId !== null) cancelAnimationFrame(mapAnimationFrameId)
     animate();
     // createMasking()
 
 
     // 測試多個物件同時移動
-    document.addEventListener('keydown', (event) => {
-        if (event.ctrlKey) {
-            state.keyctrl = true
-        }
-    });
-
-    document.addEventListener('keyup', (event) => {
-        if (event.key === 'Control') {
-            state.keyctrl = false
-        }
-    });
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    document.addEventListener('keyup', handleDocumentKeyUp);
     state.focusObjectList = {
         spot: [],
         line: [],
@@ -4730,9 +4739,34 @@ const runRTCLegacy = (id, url, videoType) => {
     init()
     // window.addEventListener('DOMContentLoaded', init);
 }
+let isWorkActive = false
+let ws3RetryTimer = null
+let ws7RetryTimer = null
+let workerRestartTimer = null
+
+const clearLifecycleTimers = () => {
+    if (ws3RetryTimer !== null) {
+        clearTimeout(ws3RetryTimer)
+        ws3RetryTimer = null
+    }
+    if (ws7RetryTimer !== null) {
+        clearTimeout(ws7RetryTimer)
+        ws7RetryTimer = null
+    }
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+}
+
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect03().readyState === 1) {
+            if (ws3RetryTimer !== null) {
+                clearTimeout(ws3RetryTimer)
+                ws3RetryTimer = null
+            }
             state.ws3 = $webSocketconnect03()
             if (state.wsListener3.close !== null) {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
@@ -4743,9 +4777,12 @@ const initWs3 = () => {
                 state.wsListener3.message = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                if (isWorkActive && ws3RetryTimer === null) {
+                    ws3RetryTimer = setTimeout(() => {
+                        ws3RetryTimer = null
+                        if (isWorkActive) openwebsocket03()
+                    }, 1000)
+                }
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
@@ -4783,9 +4820,12 @@ const initWs3 = () => {
             state.ws3.addEventListener("message", messageEvent)
             state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            if (isWorkActive && ws3RetryTimer === null) {
+                ws3RetryTimer = setTimeout(() => {
+                    ws3RetryTimer = null
+                    if (isWorkActive) openwebsocket03()
+                }, 1000)
+            }
         }
     }
     openwebsocket03()
@@ -4793,7 +4833,12 @@ const initWs3 = () => {
 
 const initWs7 = () => {
     const openwebsocket07 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect07().readyState === 1) {
+            if (ws7RetryTimer !== null) {
+                clearTimeout(ws7RetryTimer)
+                ws7RetryTimer = null
+            }
             state.ws7 = $webSocketconnect07()
             if (state.wsListener7.close !== null) {
                 state.ws7.removeEventListener("close", state.wsListener7.close)
@@ -4804,9 +4849,12 @@ const initWs7 = () => {
                 state.wsListener7.message = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket07()
-                }, 1000)
+                if (isWorkActive && ws7RetryTimer === null) {
+                    ws7RetryTimer = setTimeout(() => {
+                        ws7RetryTimer = null
+                        if (isWorkActive) openwebsocket07()
+                    }, 1000)
+                }
             }
             state.ws7.addEventListener("close", colseEvent)
             state.wsListener7.close = colseEvent
@@ -4851,16 +4899,22 @@ const initWs7 = () => {
             state.ws7.addEventListener("message", messageEvent)
             state.wsListener7.message = messageEvent
         } else if ($webSocketconnect07().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket07()
-            }, 1000)
+            if (isWorkActive && ws7RetryTimer === null) {
+                ws7RetryTimer = setTimeout(() => {
+                    ws7RetryTimer = null
+                    if (isWorkActive) openwebsocket07()
+                }, 1000)
+            }
         }
     }
     openwebsocket07()
 }
 // =================================================================
 const switchWK = (e) => {
-    if (e) {
+    const enabled = Boolean(e)
+    if (isWorkActive === enabled) return
+    isWorkActive = enabled
+    if (enabled) {
         // const currentPort = window.location.port;
         // if (camType === 'ir') {
         //     runRTC(`video${camType}${camID}-${state.randomID}`, `http://${$getIpaddress()}:${currentPort}/video/realtime/${camType}${camID}`, 'vis')
@@ -4881,6 +4935,11 @@ const switchWK = (e) => {
     }
 }
 const runWorkerTurf = () => {
+    if (!isWorkActive) return
+    if (state.workerTurf !== null) {
+        state.workerTurf.terminate()
+        state.workerTurf = null
+    }
     state.workerTurf = new Worker('/worker/workerTurf.js');
     state.workerTurf.addEventListener('message', (e) => {
         var data = e.data.parameter
@@ -4895,6 +4954,11 @@ const runWorkerTurf = () => {
     })
 }
 const runpixiWebWorker = () => {
+    if (!isWorkActive) return
+    if (state.pixiWebWorker !== null) {
+        state.pixiWebWorker.terminate()
+        state.pixiWebWorker = null
+    }
     state.pixiWebWorker = new Worker('/worker/workerpixpjs.js');
     state.pixiWebWorker.addEventListener('message', (e) => {
         var data = e.data
@@ -4918,6 +4982,8 @@ const runpixiWebWorker = () => {
     }, false);
 }
 const stopProgram = () => {
+    isWorkActive = false
+    clearLifecycleTimers()
     // state.rtcPeerConnectionItems.forEach((item) => {
     //     item.close();
     // })
@@ -5047,6 +5113,15 @@ const runTempNumber = () => {
     }, 1000)
 }
 const runwk = () => {
+    if (!isWorkActive) return
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+    if (state.webWorker !== null) {
+        state.webWorker.terminate()
+        state.webWorker = null
+    }
     state.webWorker = new Worker('/worker/roiTrack-temp.js');
     state.webWorker.addEventListener('message', (e) => {
         var res = e.data
@@ -5131,9 +5206,12 @@ const runwk = () => {
             console.log('close');
             state.webWorker.terminate();
             state.webWorker = null
-            setTimeout(() => {
-                runwk()
-            }, 1)
+            if (isWorkActive && workerRestartTimer === null) {
+                workerRestartTimer = setTimeout(() => {
+                    workerRestartTimer = null
+                    if (isWorkActive) runwk()
+                }, 1)
+            }
         }
     })
 }
@@ -5144,18 +5222,8 @@ onMounted(() => {
     // setInterval(() => {
     //     console.log('displayRoi', $displayRoi());
     // },1000)
-    document.addEventListener('mousedown', (event) => {
-        // event.preventDefault()
-        if (event.button === 0 && map !== null) {
-            map.dragging.disable()
-        }
-
-    });
-    document.addEventListener('mouseup', () => {
-        if (event.button === 0 && map !== null) {
-            map.dragging.enable()
-        }
-    });
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
 
     // console.log(workerTurf);
     // state.state()
@@ -5222,6 +5290,14 @@ onMounted(() => {
     // initWs3()
 })
 onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleDocumentKeyDown)
+    document.removeEventListener('keyup', handleDocumentKeyUp)
+    document.removeEventListener('mousedown', handleDocumentMouseDown)
+    document.removeEventListener('mouseup', handleDocumentMouseUp)
+    if (mapAnimationFrameId !== null) {
+        cancelAnimationFrame(mapAnimationFrameId)
+        mapAnimationFrameId = null
+    }
     rtcPlayers.forEach((player) => player.stop())
     rtcPlayers.clear()
     state.rtcPeerConnectionItems.forEach((item) => {

@@ -888,18 +888,41 @@ const roitp = (e, type) => {
         roiItems.classList.add('d-none')
     }
 }
+let isWorkActive = false
+let ws3RetryTimer = null
+let workerRestartTimer = null
+
+const clearWorkTimers = () => {
+    if (ws3RetryTimer !== null) {
+        clearTimeout(ws3RetryTimer)
+        ws3RetryTimer = null
+    }
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+}
+
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect03().readyState === 1) {
+            if (ws3RetryTimer !== null) {
+                clearTimeout(ws3RetryTimer)
+                ws3RetryTimer = null
+            }
             state.ws3 = $webSocketconnect03()
             if (state.wsListener3.close !== null) {
                 state.ws3.removeEventListener("close", state.wsListener3.close)
                 state.wsListener3.close = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                if (isWorkActive && ws3RetryTimer === null) {
+                    ws3RetryTimer = setTimeout(() => {
+                        ws3RetryTimer = null
+                        if (isWorkActive) openwebsocket03()
+                    }, 1000)
+                }
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
@@ -911,15 +934,21 @@ const initWs3 = () => {
             // state.ws3.addEventListener("message", messageEvent)
             // state.wsListener3.message = messageEvent
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            if (isWorkActive && ws3RetryTimer === null) {
+                ws3RetryTimer = setTimeout(() => {
+                    ws3RetryTimer = null
+                    if (isWorkActive) openwebsocket03()
+                }, 1000)
+            }
         }
     }
     openwebsocket03()
 }
 const switchWK = (e) => {
-    if (e) {
+    const enabled = Boolean(e)
+    if (isWorkActive === enabled) return
+    isWorkActive = enabled
+    if (enabled) {
         initWs3()
         runwk02()
     } else {
@@ -927,6 +956,8 @@ const switchWK = (e) => {
     }
 }
 const stopProgram = () => {
+    isWorkActive = false
+    clearWorkTimers()
     if (state.wsListener3.close !== null) {
         state.ws3.removeEventListener("close", state.wsListener3.close)
         state.wsListener3.close = null
@@ -944,8 +975,16 @@ const stopProgram = () => {
         state.webWorker02 = null
     }
 }
-initWs3()
 const runwk02 = () => {
+    if (!isWorkActive) return
+    if (workerRestartTimer !== null) {
+        clearTimeout(workerRestartTimer)
+        workerRestartTimer = null
+    }
+    if (state.webWorker02 !== null) {
+        state.webWorker02.terminate()
+        state.webWorker02 = null
+    }
     state.webWorker02 = new Worker('/worker/wktows02.js');
     state.webWorker02.addEventListener('message', (e) => {
         var res = e.data
@@ -969,9 +1008,12 @@ const runwk02 = () => {
         } else if (type === 'close') {
             state.webWorker02.terminate();
             state.webWorker02 = null
-            setTimeout(() => {
-                runwk02()
-            }, 1)
+            if (isWorkActive && workerRestartTimer === null) {
+                workerRestartTimer = setTimeout(() => {
+                    workerRestartTimer = null
+                    if (isWorkActive) runwk02()
+                }, 1)
+            }
         }
     })
 }

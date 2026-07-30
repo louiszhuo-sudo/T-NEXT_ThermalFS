@@ -1,6 +1,6 @@
 {
   "name": "thermalfs-donghe",
-  "version": "1.0.16",
+  "version": "1.0.18",
   "description": "ThermalFS Donghe Electron desktop runtime and Nuxt application.",
   "author": "YST",
   "type": "module",

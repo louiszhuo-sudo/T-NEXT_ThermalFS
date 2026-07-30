@@ -1433,7 +1433,33 @@ const operation = () => {
     state.ws3.send(JSON.stringify(output))
 }
 const refreshHmiWk = ref(null)
+let isWorkActive = false
+let ws3RetryTimer = null
+let worker02RestartTimer = null
+let worker05RestartTimer = null
+let hmiWorkerRestartTimer = null
+let ptzControlTimer = null
+
+const clearTimer = (timer) => {
+    if (timer !== null) clearTimeout(timer)
+    return null
+}
+
+const clearWorkRetryTimers = () => {
+    ws3RetryTimer = clearTimer(ws3RetryTimer)
+    worker02RestartTimer = clearTimer(worker02RestartTimer)
+    worker05RestartTimer = clearTimer(worker05RestartTimer)
+    hmiWorkerRestartTimer = clearTimer(hmiWorkerRestartTimer)
+    ptzControlTimer = clearTimer(ptzControlTimer)
+}
+
 const runHMIwk = (item) => {
+    if (!isWorkActive) return
+    hmiWorkerRestartTimer = clearTimer(hmiWorkerRestartTimer)
+    if (refreshHmiWk.value !== null) {
+        refreshHmiWk.value.e.terminate()
+        refreshHmiWk.value = null
+    }
     // console.log('runHMIwk', item.tab_id);
     let temp = new Worker('/worker/wktows02-hmi.js')
     temp.addEventListener('message', (e) => {
@@ -1459,9 +1485,12 @@ const runHMIwk = (item) => {
         } else if (type === 'close') {
             temp.terminate();
             temp = null
-            setTimeout(() => {
-                runHMIwk(item)
-            }, 1)
+            if (isWorkActive && hmiWorkerRestartTimer === null) {
+                hmiWorkerRestartTimer = setTimeout(() => {
+                    hmiWorkerRestartTimer = null
+                    if (isWorkActive) runHMIwk(item)
+                }, 1)
+            }
         }
     })
     refreshHmiWk.value = {
@@ -1861,7 +1890,9 @@ const tableAlarmColor = (e) => {
 
 const initWs3 = () => {
     const openwebsocket03 = () => {
+        if (!isWorkActive) return
         if ($webSocketconnect03().readyState === 1) {
+            ws3RetryTimer = clearTimer(ws3RetryTimer)
             console.log('$webSocketconnect03()', $webSocketconnect03());
             state.ws3 = $webSocketconnect03()
             if (state.wsListener3.close !== null) {
@@ -1873,9 +1904,12 @@ const initWs3 = () => {
                 state.wsListener3.message = null
             }
             const colseEvent = () => {
-                setTimeout(() => {
-                    openwebsocket03()
-                }, 1000)
+                if (isWorkActive && ws3RetryTimer === null) {
+                    ws3RetryTimer = setTimeout(() => {
+                        ws3RetryTimer = null
+                        if (isWorkActive) openwebsocket03()
+                    }, 1000)
+                }
             }
             state.ws3.addEventListener("close", colseEvent)
             state.wsListener3.close = colseEvent
@@ -1922,9 +1956,12 @@ const initWs3 = () => {
             }
             initConnent()
         } else if ($webSocketconnect03().readyState !== 1) {
-            setTimeout(() => {
-                openwebsocket03()
-            }, 1000)
+            if (isWorkActive && ws3RetryTimer === null) {
+                ws3RetryTimer = setTimeout(() => {
+                    ws3RetryTimer = null
+                    if (isWorkActive) openwebsocket03()
+                }, 1000)
+            }
         }
     }
     openwebsocket03()
@@ -2000,12 +2037,15 @@ const runroirander = (e) => {
     // }
 }
 const switchWK = (e) => {
-    mapImport1.value.switchWK(e)
+    const enabled = Boolean(e)
+    if (isWorkActive === enabled) return
+    isWorkActive = enabled
+    mapImport1.value.switchWK(enabled)
     if (mapImport3.value !== null) {
-        mapImport3.value.switchWK(e)
+        mapImport3.value.switchWK(enabled)
     }
-    ctreeviewA.value.switchWK(e)
-    if (e) {
+    ctreeviewA.value.switchWK(enabled)
+    if (enabled) {
         console.log('switchWKswitchWKswitchWKswitchWK', camID);
         initWs3()
         runwk02()
@@ -2016,8 +2056,11 @@ const switchWK = (e) => {
     }
 }
 const stopProgram = () => {
+    isWorkActive = false
+    clearWorkRetryTimers()
     if (refreshHmiWk.value !== null) {
         refreshHmiWk.value.e.terminate()
+        refreshHmiWk.value = null
     }
     if (state.wsListener3.close !== null) {
         state.ws3.removeEventListener("close", state.wsListener3.close)
@@ -2054,6 +2097,12 @@ const stopProgram = () => {
     }
 }
 const runwk02 = () => {
+    if (!isWorkActive) return
+    worker02RestartTimer = clearTimer(worker02RestartTimer)
+    if (state.webWorker02 !== null) {
+        state.webWorker02.terminate()
+        state.webWorker02 = null
+    }
     console.log('runwk02runwk02runwk02');
     state.webWorker02 = new Worker('/worker/wktows02.js');
     state.webWorker02.addEventListener('message', (e) => {
@@ -2078,13 +2127,22 @@ const runwk02 = () => {
             console.log('close');
             state.webWorker02.terminate();
             state.webWorker02 = null
-            setTimeout(() => {
-                runwk02()
-            }, 1)
+            if (isWorkActive && worker02RestartTimer === null) {
+                worker02RestartTimer = setTimeout(() => {
+                    worker02RestartTimer = null
+                    if (isWorkActive) runwk02()
+                }, 1)
+            }
         }
     })
 }
 const runwk05 = () => {
+    if (!isWorkActive) return
+    worker05RestartTimer = clearTimer(worker05RestartTimer)
+    if (state.webWorker !== null) {
+        state.webWorker.terminate()
+        state.webWorker = null
+    }
     state.webWorker = new Worker('/worker/wktows05.js');
     state.webWorker.addEventListener('message', (e) => {
         var res = e.data
@@ -2141,9 +2199,12 @@ const runwk05 = () => {
             console.log('close');
             state.webWorker.terminate();
             state.webWorker = null
-            setTimeout(() => {
-                runwk05()
-            }, 1)
+            if (isWorkActive && worker05RestartTimer === null) {
+                worker05RestartTimer = setTimeout(() => {
+                    worker05RestartTimer = null
+                    if (isWorkActive) runwk05()
+                }, 1)
+            }
         }
     })
 }
@@ -2738,7 +2799,8 @@ const runRTC = (dom, url, videoType) => {
     // window.addEventListener('DOMContentLoaded', init);
 }
 const sendPtzControl = () => {
-    if (state.ptzControlStatus !== 'none') {
+    if (isWorkActive && state.ws3?.readyState === WebSocket.OPEN && state.ptzControlStatus !== 'none') {
+        ptzControlTimer = clearTimer(ptzControlTimer)
         const comboMap = {
             'up left': ['up', 'left'],
             'up right': ['up', 'right'],
@@ -2766,8 +2828,9 @@ const sendPtzControl = () => {
             state.ws3.send(JSON.stringify(makeOutput(state.ptzControlStatus)))
         }
 
-        setTimeout(() => {
-            if (state.ptzControlStatus !== 'none') {
+        ptzControlTimer = setTimeout(() => {
+            ptzControlTimer = null
+            if (isWorkActive && state.ptzControlStatus !== 'none') {
                 sendPtzControl()
             }
         }, 300)
